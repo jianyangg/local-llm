@@ -14,5 +14,5 @@ class GraphState(TypedDict):
 
     question: str
     generation: str
-    web_search: str
+    give_up: str
     documents: List[str]
