@@ -1,9 +1,49 @@
 from GraphState import GraphState
 from CustomLLM import CustomLLM
+# these are just for testing
+# we will be using 
+from langchain_community.document_loaders import WebBaseLoader
+from langchain_community.vectorstores import Chroma
+from langchain_community.embeddings import GPT4AllEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 class Decision:
     def __init__(self):
+
+        # TODO: Temporary code
+        # to be replaced with Neo4J implementation and a portal for uploading
+        # documents in the vector database
+        urls = [
+            "https://lilianweng.github.io/posts/2023-06-23-agent/",
+            "https://lilianweng.github.io/posts/2023-03-15-prompt-engineering/",
+            "https://lilianweng.github.io/posts/2023-10-25-adv-attack-llm/",
+        ]
+
+        docs = [WebBaseLoader(url).load() for url in urls]
+        docs_list = [item for sublist in docs for item in sublist]
+
+        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            chunk_size=250, chunk_overlap=0
+        )
+        doc_splits = text_splitter.split_documents(docs_list)
+
+        model_name = "all-MiniLM-L6-v2.gguf2.f16.gguf"
+        gpt4all_kwargs = {'allow_download': 'True'}
+        embeddings = GPT4AllEmbeddings(
+            model_name=model_name,
+            gpt4all_kwargs=gpt4all_kwargs
+        )
+
+        # Add to vectorDB
+        vectorstore = Chroma.from_documents(
+            documents=doc_splits,
+            collection_name="rag-chroma",
+            embedding=embeddings,
+        )
+
+        self.retriever = vectorstore.as_retriever()
         self.custom_llm = CustomLLM()
+
 
     def initial_routing(self, state: GraphState):
         """
@@ -36,31 +76,182 @@ class Decision:
         elif decision["datasource"] == "vectorstore":
             print("Route decided: Retrieve documents.")
             # TODO: implement the retrieval of documents
-            # return "retrieve_documents"
-            return "give up"
+            return "vectorstore"
         else:
             # Should not reach here
             print("Error: Invalid decision in initial_routing.")
-            return "give up"
+            return "giveup"
+
 
     def give_up(self, state: GraphState):
+        """
+        This function is called when the LLM decides to give up on the question.
+        We can change this function to do something else in the future.
+        i.e., web search, etc.
+
+        Args:
+            state (GraphState): The state of the graph
+
+        Returns:
+            dict: The response to the user
+        """
         print("Give up.")
         print("---" * 10)
 
         return {"generation": "I'm not capable of answering the question due to insufficient knowledge or your request. \
                 Please improve your prompt or upload relevant documents."}
 
-    def retrieve_documents(self):
-        return
 
-    def grade_documents(self):
-        return
+    def retrieve_documents(self, state):
+        """
+        Retrieve documents from vectorstore
+        TODO: To be replaced with Neo4J database
 
-    def generate(self):
-        return
+        Args:
+            state (dict): The current graph state
 
-    def check_relevance(self):
-        return
+        Returns:
+            state (dict): New key added to state, documents, that contains retrieved documents
+        """
+        print("Retrieving documents...")
+        # get the question from the state which is a child of GraphState
+        question = state["question"]
 
-    def grade_generation_wrt_documents_and_question(self):
-        return
+        # Retrieval
+        ## use our vector db to fetch documents relevant to our question
+        documents = self.retriever.invoke(question)
+        print("Type of documents:", type(documents))
+        return {"documents": documents, "question": question}
+
+
+    def grade_documents(self, state):
+        """
+        Grade the relevance of documents based on the question.
+        # TODO: Instead of this, we can also consider the relative nearness of these documents
+        # to the question. This can be done by using the vectordatabase.
+
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            state (dict): Updated state with relevant documents, question and give_up status
+        """
+        print("Grading documents...")
+        question = state["question"]
+        documents = state["documents"]
+
+        # Score each doc
+        filtered_docs = []
+        relevant_docs = 0
+        for d in documents:
+            score = self.custom_llm.retrieval_grader(
+                question, d.page_content
+            )
+            ## recall that the score variable holds a json {"score": "yes"}
+            grade = score["score"]
+            # Document relevant
+            if grade.lower() == "yes":
+                print("Document relevant.")
+                filtered_docs.append(d)
+                relevant_docs += 1
+
+            else:
+                print("Document not relevant.")
+
+        # If no relevant documents, we give up.
+        if relevant_docs == 0:
+            print("No relevant documents found.")
+            give_up = "yes"
+        else:
+            give_up = "no"
+
+        # give_up status
+        return {"documents": filtered_docs, "question": question, "give_up": give_up}
+
+
+    def generate_answer(self, state):
+        """
+        Generate answer using RAG on retrieved documents
+
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            state (dict): New key added to state, generation, that contains LLM generation
+        """
+        print("Generating answer...")
+        question = state["question"]
+        documents = state["documents"]
+
+        # Concatenate all documents
+        context = "\n\n".join(doc.page_content for doc in documents)
+
+        generated_answer = self.custom_llm.answer_generator(context=context, qn=question)
+        # Only the last item is generated in this function
+        return {"documents": documents, "question": question, "generation": generated_answer}
+
+
+    def decide_to_generate(self, state):
+        """
+        Determines whether to generate an answer, or give up
+        Criteria is based on the relevance of the documents to the question.
+
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            str: Binary decision for next node to call
+        """
+
+        print("Conditional Edge: Deciding to generate...")
+        give_up = state["give_up"]
+
+        if give_up == "yes":
+            print("Decision: Give up.")
+            return "give up"
+        else:
+            # We have relevant documents, so generate answer
+            print("Decision: Generate answer.")
+            return "generate"
+
+
+
+    def grade_generation_wrt_documents_and_question(self, state):
+        """
+        Determines whether the generation is grounded in the document and answers question.
+
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            str: Decision for next node to call
+        """
+
+        print("Checking hallucinations and question-answering...")
+        question = state["question"]
+        documents = state["documents"]
+        generation = state["generation"]
+
+        score = self.custom_llm.hallucination_grader(
+            generated_answer=generation, documents=documents
+        )
+
+        # TODO: Consider passing the grade as a boolean instead of a string.
+        grade = score["score"]
+
+        # Check hallucination as in whether generation is grounded in documents
+        if grade == "yes":
+            print("Verdict: Generated answer is grounded in documents.")
+            # Check question-answering
+            print("Checking if generation answers the question...")
+            score = self.custom_llm.answer_grader(generated_answer=generation, qn=question)
+            grade = score["score"]
+            if grade == "yes":
+                print("Verdict: Generated answer is useful.")
+                return "useful"
+            else:
+                print("Verdict: Generated answer is not useful.")
+                return "not useful"
+        else:
+            print("Verdict: Generated answer is not grounded in documents.")
+            return "not supported"

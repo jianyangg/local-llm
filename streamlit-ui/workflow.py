@@ -22,10 +22,10 @@ def buildChatApp():
     workflow = StateGraph(GraphState)
 
     # Define the nodes
-    workflow.add_node("give_up", decision.give_up)  # give up if no relevant documents are found.
+    workflow.add_node("giveup", decision.give_up)  # give up if no relevant documents are found.
     workflow.add_node("retrieve_documents", decision.retrieve_documents)  # retrieve documents
     workflow.add_node("grade_documents", decision.grade_documents)  # grade documents
-    workflow.add_node("generate", decision.generate)  # generate
+    workflow.add_node("generate", decision.generate_answer)  # generate
 
     """
     Construct the graph.
@@ -37,7 +37,7 @@ def buildChatApp():
         decision.initial_routing,
         # Format: <output_from_intialRoutingFn: node_name>
         {
-            "give up": "give_up",
+            "give up": "giveup",
             "vectorstore": "retrieve_documents",
         },
     )
@@ -47,9 +47,9 @@ def buildChatApp():
     workflow.add_edge("retrieve_documents", "grade_documents")
     workflow.add_conditional_edges(
        "grade_documents",
-        decision.check_relevance,
+        decision.decide_to_generate,
         {
-            "give up": "give_up",
+            "give up": "giveup",
             "generate": "generate",
         },     
     )
@@ -58,7 +58,7 @@ def buildChatApp():
     ### the node implicitly prints the message,
     ### asking user to improve the prompt or upload relevant documents
     ### give_up node links directly to the END node
-    workflow.add_edge("give_up", END)
+    workflow.add_edge("giveup", END)
 
 
     ## 3. Grade Documents (the last few sections of the workflow)
@@ -73,7 +73,7 @@ def buildChatApp():
             # useful if no hallucinations and answers the question
             "useful": END,
             # not useful in answering the question
-            "not useful": "give_up",
+            "not useful": "giveup",
         },
     )
 

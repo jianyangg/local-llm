@@ -47,7 +47,9 @@ def generate(prompt, st):
             for output in chat_app.stream(inputs):
                 for key, value in output.items():
                     st.write(f"Finished running: {key}:")
-            
+                    pprint(value)
+                    print()
+
             # return the response to animate
             return value["generation"]
         
@@ -55,6 +57,7 @@ def generate(prompt, st):
             tries += 1
             st.write(f"Error: {e}")
             st.write(f"Retrying... {tries}/{max_tries}")
+            print(f"Error: {e}")
             continue
     
     return "I'm sorry, I'm unable to generate a response at the moment. Please try again later."

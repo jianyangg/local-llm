@@ -13,7 +13,7 @@ def response_generator(prompt):
         time.sleep(0.025)
 
 
-st.title("Basic Chatbot with Streamlit")
+st.title("Agentic RAG")
 
 # Initialize chat history
 if "messages" not in st.session_state:
