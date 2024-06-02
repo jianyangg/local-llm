@@ -70,9 +70,9 @@ class Decision:
         decision = self.custom_llm.initial_router(user_prompt)
         print("DECISON:", decision)
 
-        if decision["datasource"] == "give up":
-            print("Route decided: Give up.")
-            return "give up"
+        if decision["datasource"] == "generate":
+            print("Route decided: Generate answer without RAG.")
+            return "generate"
         elif decision["datasource"] == "vectorstore":
             print("Route decided: Retrieve documents.")
             # TODO: implement the retrieval of documents
@@ -184,7 +184,10 @@ class Decision:
         documents = state["documents"]
 
         # Concatenate all documents
-        context = "\n\n".join(doc.page_content for doc in documents)
+        if documents:
+            context = "\n\n".join(doc.page_content for doc in documents)
+        else:
+            context = "No relevant documents found. Answer solely based off the prompt given."
 
         generated_answer = self.custom_llm.answer_generator(context=context, qn=question)
         # Only the last item is generated in this function
@@ -231,6 +234,19 @@ class Decision:
         question = state["question"]
         documents = state["documents"]
         generation = state["generation"]
+
+        # if no documents, we can't grade the generation w.r.t. documents
+        # so run answer_grader only
+        if not documents:
+            print("No documents to grade.")
+            score = self.custom_llm.answer_grader(generated_answer=generation, qn=question)
+            grade = score["score"]
+            if grade == "yes":
+                print("Verdict: Generated answer is useful.")
+                return "useful"
+            else:
+                print("Verdict: Generated answer is not useful.")
+                return "not useful"
 
         score = self.custom_llm.hallucination_grader(
             generated_answer=generation, documents=documents

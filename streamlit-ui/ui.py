@@ -1,19 +1,20 @@
 import streamlit as st
+from streamlit_chat import message
 import time
 from entryPoint import entry
 
 # Streamed response emulator
 def response_generator(prompt):
     response = entry(prompt, st)
+    print("TEXT:", response)
+    lines = response.split("\n")
 
-    # TODO: remove comment
-    # response = llm.invoke(input=prompt).content
-    for word in response.split():
-        yield word + " "
-        time.sleep(0.025)
+    # Animation
+    for line in lines:
+        yield line + "\n"
+        time.sleep(0.042)
 
-
-st.title("Agentic RAG")
+st.title("Hello, I am Jarvis.")
 
 # Initialize chat history
 if "messages" not in st.session_state:
@@ -29,11 +30,15 @@ if prompt := st.chat_input("Enter a prompt here."):
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     # Display user message in chat message container
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar="👤"):
+        st.markdown("**You**")
         st.markdown(prompt)
 
     # Display assistant response in chat message container
-    with st.chat_message("assistant"):
-        response = st.write_stream(response_generator(prompt=prompt))
+    with st.chat_message("assistant", avatar="🤖"):
+        st.write("**Jarvis**")
+        response = st.write_stream(response_generator(prompt=prompt), )
+
     # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
+

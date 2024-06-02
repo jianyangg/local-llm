@@ -7,7 +7,7 @@ class CustomLLM:
     def __init__(self):
         self.json_parser = JsonOutputParser()
         self.json_llm = ChatOllama(model="llama3", temperature=0, format="json")
-        self.llm = ChatOllama(model="llama3", temperature=0)
+        self.llm = ChatOllama(model="llama3", temperature=0.3)
 
 
     def initial_router(self, prompt: str):
@@ -27,10 +27,13 @@ class CustomLLM:
 
         routing_prompt = PromptTemplate(
             template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are an expert at deciding whether a question
-            is worth answering or not. Questions that are not worth answering are the ones that are rude or asks you to perform
-            image generation tasks. Questions that asks you about your knowledge base are the ones that you SHOULD answer, especially
-            those summary or analysis-based-on-knowledge tasks.
-            Give a binary choice of 'give up' if question is not worth answering, or 'vectorstore' if the question is worth answering.
+            requires the retrieval of information from a vectorstore before generating a response or to go straight to generating a response.
+            Generic questions that can be answered without data are not worth
+            routing to the vectorstore and should be answered directly through generation.
+            If questions refer you to a knowledge base or a data source, you should route the question to the 'vectorstore'. Otherwise, you should
+            reply 'generate' to answer the question directly.
+            If the question DOES NOT hint at the use of your knowledge base, you should route the question to 'generate'.
+            Give a binary choice of 'generate' if question requires NO reference to the datasource, and 'vectorstore' if it does.
             Return a JSON with a single key 'datasource' and 
             no preamble or explanation. Question to route: {question} <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
             input_variables=["question"],
@@ -87,11 +90,14 @@ class CustomLLM:
             str: The generated answer
         """
         answer_prompt = PromptTemplate(
-            template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are an assistant for question-answering tasks. 
+            template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a helpful and friendly but not overly enthusiastic assistant called Jarvis.
+            On top of answering, you are to try and see how else you can help the user on top of what they asked for.
             Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. 
-            Use ten sentences maximum and keep the answer concise <|eot_id|><|start_header_id|>user<|end_header_id|>
+            Prioritise answering the question over short answers, but avoid overly verbose response unless specifically asked.
+            Include a citation to your response so that the user can verify the information.
+            Format your response in markdown with clear headings, describe new lines as \n, and good formatting.<|eot_id|><|start_header_id|>user<|end_header_id|>
             Question: {question} 
-            Context: {context} 
+            Context: {context}
             Answer: <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
             input_variables=["question", "document"],
         )
