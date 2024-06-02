@@ -1,6 +1,8 @@
 from time import sleep
 from pprint import pprint
 from workflow import buildChatApp
+import traceback
+import time
 
 def entry(prompt, st):
     """
@@ -39,24 +41,30 @@ def generate(prompt, st):
 
     # run the workflow
     ## there might be errors (llm not producing a json when required)
-    ## so we have to catch and rerun in those instances.
     tries = 0
     max_tries = 3
     while tries < max_tries:
         try:
+            start_time = time.time()
             for output in chat_app.stream(inputs):
                 for key, value in output.items():
-                    st.write(f"Finished running: {key}:")
+                    print(f"Finished running: {key}:")
                     pprint(value)
                     print()
 
-            # return the response to animate
+                # return the response to animate
+                if time.time() - start_time > 60:
+                    print(TimeoutError("Process took too long to complete"))
+                    return "I'm sorry, I'm unable to generate a response at the moment. Please try again later or change your prompt."
+            
             return value["generation"]
         
         except Exception as e:
             tries += 1
             st.write(f"Error: {e}")
+            st.write(f"Error location: {traceback.format_exc()}")
             st.write(f"Retrying... {tries}/{max_tries}")
+            print(f"Error location: {traceback.format_exc()}")
             print(f"Error: {e}")
             continue
     

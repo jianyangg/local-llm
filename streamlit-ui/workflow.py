@@ -37,7 +37,7 @@ def buildChatApp():
         decision.initial_routing,
         # Format: <output_from_intialRoutingFn: node_name>
         {
-            "give up": "giveup",
+            "generate": "generate",
             "vectorstore": "retrieve_documents",
         },
     )
@@ -73,7 +73,7 @@ def buildChatApp():
             # useful if no hallucinations and answers the question
             "useful": END,
             # not useful in answering the question
-            "not useful": "giveup",
+            "not useful": END,
         },
     )
 

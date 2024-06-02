@@ -16,3 +16,6 @@ class GraphState(TypedDict):
     generation: str
     give_up: str
     documents: List[str]
+
+    # initialise documents as empty list
+    documents = []
