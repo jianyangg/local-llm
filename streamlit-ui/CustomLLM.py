@@ -1,4 +1,5 @@
-from langchain_community.chat_models import ChatOllama
+# from langchain_community.chat_models import ChatOllama
+from langchain_community.llms import Ollama
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.output_parsers import StrOutputParser
@@ -6,9 +7,14 @@ from langchain_core.output_parsers import StrOutputParser
 class CustomLLM:
     def __init__(self):
         self.json_parser = JsonOutputParser()
-        self.json_llm = ChatOllama(model="llama3", temperature=0, format="json")
-        self.llm = ChatOllama(model="llama3", temperature=0.3)
 
+        ## For testing with llama3
+        # self.json_llm = Ollama(model="llama3", temperature=0, format="json", base_url="http://localhost:11434")
+        # self.llm = Ollama(model="llama3", temperature=0.1, base_url="http://localhost:11434")
+
+        ## For testing with phi2
+        self.json_llm = Ollama(model="phi", temperature=0, format="json", base_url="http://localhost:11435")
+        self.llm = Ollama(model="phi", temperature=0.1, base_url="http://localhost:11435")
 
     def initial_router(self, prompt: str):
         """
@@ -26,7 +32,20 @@ class CustomLLM:
         """
 
         routing_prompt = PromptTemplate(
-            template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are an expert at deciding whether a question
+            ## Template for llama3
+            # template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are an expert at deciding whether a question
+            # requires the retrieval of information from a vectorstore before generating a response or to go straight to generating a response.
+            # Generic questions that can be answered without data are not worth
+            # routing to the vectorstore and should be answered directly through generation.
+            # If questions refer you to a knowledge base or a data source, you should route the question to the 'vectorstore'. Otherwise, you should
+            # reply 'generate' to answer the question directly.
+            # If the question DOES NOT hint at the use of your knowledge base, you should route the question to 'generate'.
+            # Give a binary choice of 'generate' if question requires NO reference to the datasource, and 'vectorstore' if it does.
+            # Return a JSON with a single key 'datasource' and 
+            # no preamble or explanation. Question to route: {question} <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+
+            ## Template for phi2
+            template="""You are an expert at deciding whether a question
             requires the retrieval of information from a vectorstore before generating a response or to go straight to generating a response.
             Generic questions that can be answered without data are not worth
             routing to the vectorstore and should be answered directly through generation.
@@ -35,7 +54,7 @@ class CustomLLM:
             If the question DOES NOT hint at the use of your knowledge base, you should route the question to 'generate'.
             Give a binary choice of 'generate' if question requires NO reference to the datasource, and 'vectorstore' if it does.
             Return a JSON with a single key 'datasource' and 
-            no preamble or explanation. Question to route: {question} <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+            no preamble or explanation. Question to route: {question}""",
             input_variables=["question"],
         )
 
@@ -57,15 +76,28 @@ class CustomLLM:
             str: The grade of the document
         """
         doc_grader_prompt = PromptTemplate(
-            template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a grader assessing relevance 
+            ## Template for llama3
+            # template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a grader assessing relevance 
+            # of a retrieved document to a user question. If the document contains keywords related to the user question, 
+            # grade it as relevant. It does not need to be a stringent test. The goal is to filter out erroneous retrievals. \n
+            # Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question. \n
+            # Provide the binary score as a JSON with a single key 'score' and no premable or explanation.
+            # <|eot_id|><|start_header_id|>user<|end_header_id|>
+            # Here is the retrieved document: \n\n {document} \n\n
+            # Here is the user question: {question} \n <|eot_id|><|start_header_id|>assistant<|end_header_id|>
+            # """,
+
+            ## Template for phi2
+            template="""You are a grader assessing relevance 
             of a retrieved document to a user question. If the document contains keywords related to the user question, 
             grade it as relevant. It does not need to be a stringent test. The goal is to filter out erroneous retrievals. \n
             Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question. \n
             Provide the binary score as a JSON with a single key 'score' and no premable or explanation.
             <|eot_id|><|start_header_id|>user<|end_header_id|>
             Here is the retrieved document: \n\n {document} \n\n
-            Here is the user question: {question} \n <|eot_id|><|start_header_id|>assistant<|end_header_id|>
+            Here is the user question: {question} \n
             """,
+
             # these refer to the items in {} in the template above
             input_variables=["question", "document"],
         )
@@ -90,20 +122,92 @@ class CustomLLM:
             str: The generated answer
         """
         answer_prompt = PromptTemplate(
-            template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a helpful and friendly but not overly enthusiastic assistant called Jarvis.
-            On top of answering, you are to try and see how else you can help the user on top of what they asked for.
-            Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. 
-            Prioritise answering the question over short answers, but avoid overly verbose response unless specifically asked.
-            Include a citation to your response so that the user can verify the information.
-            Format your response in markdown with clear headings, describe new lines as \n, and good formatting.<|eot_id|><|start_header_id|>user<|end_header_id|>
-            Question: {question} 
-            Context: {context}
-            Answer: <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
-            input_variables=["question", "document"],
+            # """
+            # Template for llama3
+            # """
+            # template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+            #             Jarvis, you are an AI assistant designed to answer questions using the provided context.
+            #             Your responses must be grounded in the context given. 
+
+            #             Follow these instructions carefully:
+
+            #             1. **Analyze the Context:** Thoroughly examine the context to identify relevant information related to the question.
+            #             2. **Directly Answer the Question:** Craft your response based on the information found in the context. Prioritize accuracy and relevance.
+            #             3. **Cite Your Sources:** Clearly indicate which documents from the context support your answer.
+            #             4. **Admit Lack of Knowledge:** If the context does not contain enough information to answer the question definitively, state that you don't have the answer rather than guessing or making assumptions.
+            #             5. **Optional: Suggest Further Exploration:** If appropriate, based on the context, you may offer additional insights or suggest where the user could find more information.
+
+            #             Formatting:
+
+            #             * Use markdown for clear structure (headings, lists, etc.).
+            #             * Denote new lines with \n.
+            #             * Maintain a professional and concise tone. 
+
+            #             Format:
+            #             1. Title
+            #             2. Brief Introduction to answer
+            #             3. Detailed Answer with supporting evidence
+            #             4. Sources, specific file names and pages of the documents used.
+
+            #             Important:
+
+            #             * Do not include information that is not present in the context.
+            #             * Avoid speculation or personal opinions.
+            #             * Focus on providing a factual and informative response based on the evidence available.
+
+            #             <|eot_id|><|start_header_id|>user<|end_header_id|>
+
+            #             Question: {question} 
+            #             Context: {context}
+            #             Answer: <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+            
+            # """
+            # Template for Microsoft Phi-2
+            # """
+            template="""
+                        Jarvis, you are an AI assistant designed to answer questions using the provided context.
+                        Your responses must be grounded in the context given. 
+
+                        Follow these instructions carefully:
+
+                        1. **Analyze the Context:** Thoroughly examine the context to identify relevant information related to the question.
+                        2. **Directly Answer the Question:** Craft your response based on the information found in the context. Prioritize accuracy and relevance.
+                        3. **Cite Your Sources:** Clearly indicate which documents from the context support your answer.
+                        4. **Admit Lack of Knowledge:** If the context does not contain enough information to answer the question definitively, state that you don't have the answer rather than guessing or making assumptions.
+                        5. **Optional: Suggest Further Exploration:** If appropriate, based on the context, you may offer additional insights or suggest where the user could find more information.
+
+                        Formatting:
+
+                        * Use markdown for clear structure (headings, lists, etc.).
+                        * Denote new lines with \n.
+                        * Maintain a professional and concise tone. 
+
+                        Format:
+                        1. Title
+                        2. Brief Introduction to answer
+                        3. Detailed Answer with supporting evidence
+                        4. Sources, specific file names and pages of the documents used.
+
+                        Important:
+
+                        * Do not include information that is not present in the context.
+                        * Avoid speculation or personal opinions.
+                        * Focus on providing a factual and informative response based on the evidence available.
+
+                        Keep your answer to 3 lines.
+
+                        Question: {question} 
+                        Context: {context}
+                        Answer: 
+                        """,
+            input_variables=["question", "context"],
         )
 
         answer_pipeline = answer_prompt | self.llm | StrOutputParser()
 
+        print("="*80)
+        print("Context:", context)
+        print("="*80)
         generated_answer = answer_pipeline.invoke({"question": qn, "context": context})
         print("Answer attempt (not final):", generated_answer)
         return generated_answer
@@ -122,15 +226,27 @@ class CustomLLM:
             str: The grade of the answer
         """
         hallucination_prompt = PromptTemplate(
-            template=""" <|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a grader assessing whether 
+            ## Template for llama3
+            # template=""" <|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a grader assessing whether 
+            # an answer is grounded in / supported by a set of facts. Give a binary 'yes' or 'no' score to indicate 
+            # whether the answer is grounded in / supported by a set of facts. Provide the binary score as a JSON with a 
+            # single key 'score' and no preamble or explanation. <|eot_id|><|start_header_id|>user<|end_header_id|>
+            # Here are the facts:
+            # \n ------- \n
+            # {documents} 
+            # \n ------- \n
+            # Here is the answer: {generation}  <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+
+            ## Template for phi2
+            template="""You are a grader assessing whether 
             an answer is grounded in / supported by a set of facts. Give a binary 'yes' or 'no' score to indicate 
             whether the answer is grounded in / supported by a set of facts. Provide the binary score as a JSON with a 
-            single key 'score' and no preamble or explanation. <|eot_id|><|start_header_id|>user<|end_header_id|>
+            single key 'score' and no preamble or explanation. 
             Here are the facts:
             \n ------- \n
             {documents} 
             \n ------- \n
-            Here is the answer: {generation}  <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+            Here is the answer: {generation} """,
             input_variables=["generation", "documents"],
         )
 
@@ -144,6 +260,8 @@ class CustomLLM:
     def answer_grader(self, generated_answer: str, qn: str):
         """
         Use LLM to grade whether an answer is useful for a question.
+        TODO: Consider using this to check if the answering format is being adhered to.
+        TODO: Else, include additonal guidelines in the GraphState.
 
         Args:
             generated_answer (str): The generated answer
@@ -153,14 +271,25 @@ class CustomLLM:
             str: The grade of the answer (either yes or no)
         """
         ans_grader_prompt = PromptTemplate(
-            template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a grader assessing whether an 
+            ## Template for llama3
+            # template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a grader assessing whether an 
+            # answer is useful to resolve a question. Give a binary score 'yes' or 'no' to indicate whether the answer is 
+            # useful to resolve a question. Provide the binary score as a JSON with a single key 'score' and no preamble or explanation.
+            # <|eot_id|><|start_header_id|>user<|end_header_id|> Here is the answer:
+            # \n ------- \n
+            # {generation} 
+            # \n ------- \n
+            # Here is the question: {question} <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+
+            ## Template for phi2
+            template="""You are a grader assessing whether an 
             answer is useful to resolve a question. Give a binary score 'yes' or 'no' to indicate whether the answer is 
             useful to resolve a question. Provide the binary score as a JSON with a single key 'score' and no preamble or explanation.
-            <|eot_id|><|start_header_id|>user<|end_header_id|> Here is the answer:
+            Here is the answer:
             \n ------- \n
             {generation} 
             \n ------- \n
-            Here is the question: {question} <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+            Here is the question: {question}""",
             input_variables=["generation", "question"],
         )
 

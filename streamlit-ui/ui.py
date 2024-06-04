@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit_chat import message
+# from streamlit_chat import message
 import time
 from entryPoint import entry
 
@@ -22,7 +22,8 @@ if "messages" not in st.session_state:
 
 # Display chat messages from history on app rerun
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
+    with st.chat_message(message["role"], avatar="👤" if message["role"] == "user" else "🤖"):
+    # with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
 # Accept user input
