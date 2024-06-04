@@ -3,6 +3,8 @@ import streamlit as st
 import time
 from entryPoint import entry
 
+st.set_page_config(page_title="Jarvis", page_icon="🤖")
+
 # Streamed response emulator
 def response_generator(prompt):
     response = entry(prompt, st)
@@ -38,7 +40,8 @@ if prompt := st.chat_input("Enter a prompt here."):
     # Display assistant response in chat message container
     with st.chat_message("assistant", avatar="🤖"):
         st.write("**Jarvis**")
-        response = st.write_stream(response_generator(prompt=prompt), )
+        with st.spinner("Analyzing documents..."):
+            response = st.write_stream(response_generator(prompt=prompt))
 
     # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
