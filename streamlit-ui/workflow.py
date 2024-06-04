@@ -21,6 +21,14 @@ def buildChatApp():
     # Intialise the graph
     workflow = StateGraph(GraphState)
 
+    # ## TODO: This is a temporary implementation for direct RAG.
+    # workflow.add_node("retrieve_documents", decision.retrieve_documents)  # retrieve documents
+    # workflow.add_node("generate", decision.generate_answer)  # generate
+    # workflow.set_entry_point("retrieve_documents")
+    # workflow.add_edge("retrieve_documents", "generate")
+    # workflow.add_edge("generate", END)
+
+    # # TODO: This is the implementation for a LangGraph workflow.
     # Define the nodes
     workflow.add_node("giveup", decision.give_up)  # give up if no relevant documents are found.
     workflow.add_node("retrieve_documents", decision.retrieve_documents)  # retrieve documents
