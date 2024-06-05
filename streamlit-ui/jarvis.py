@@ -40,7 +40,7 @@ if prompt := st.chat_input("Enter a prompt here."):
     # Display assistant response in chat message container
     with st.chat_message("assistant", avatar="🤖"):
         st.write("**Jarvis**")
-        with st.spinner("Analyzing documents..."):
+        with st.spinner("Thinking..."):
             response = st.write_stream(response_generator(prompt=prompt))
 
     # Add assistant response to chat history

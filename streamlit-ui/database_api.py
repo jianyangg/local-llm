@@ -64,6 +64,8 @@ def docParser(file_path):
         try:
             # LLMSherpa loader (requires container nlm-ingest to be running)
             # nlm-ingest is port forward to 5010
+
+            # TODO: Include more metadata into each chunk (i.e., which page is the chunk from)
             loader = LLMSherpaFileLoader(
                 file_path=file_path,
                 new_indent_parser=True,
@@ -82,7 +84,7 @@ def docParser(file_path):
             print(f"Error: {e}")
 
 # Upload files
-def upload_files(uploaded_files):
+def upload_files(uploaded_files, username=config["neo4j_username"], password=config["neo4j_password"]):
     combined_doc_splits = []
     for uploaded_file in uploaded_files:
         # documents folder should exist
@@ -98,9 +100,10 @@ def upload_files(uploaded_files):
     Neo4jVector.from_documents(
         documents=combined_doc_splits,
         url=config["neo4j_url"],
-        username=config["neo4j_username"],
-        password=config["neo4j_password"],
+        username=username,
+        password=password,
         embedding=embeddings,
+        # this can be varied based on the tenant
         index_name="parsers_trial_2",
         node_label="parsersTrial2",
         pre_delete_collection=True,
