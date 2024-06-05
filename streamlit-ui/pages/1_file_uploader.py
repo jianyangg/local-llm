@@ -6,7 +6,7 @@ st.set_page_config(page_title="file_uploader", page_icon="📂")
 
 st.title("Upload a file")
 st.write("Upload a file to the database.")
-st.write("At the moment, the previous database will be cleared and replaced with the new uploaded files.")
+st.write("Note: [Beta] The previous database will be cleared and replaced with the new uploaded files.")
 
 # accept multiple files
 uploaded_files = st.file_uploader("Choose files", accept_multiple_files=True)
@@ -29,7 +29,10 @@ if len(uploaded_files) != 0:
     with columns[1]:
         if st.button("Upload", use_container_width=True):
             try:
-                database_api.upload_files(uploaded_files)
+                with st.spinner("Uploading..."):
+                    # TODO: Make this asynchronous
+                    st.write("Do not send queries while database is being updated.")
+                    database_api.upload_files(uploaded_files)
                 st.success("Files uploaded successfully.")
             except Exception as e:
                 st.error(f"Error: {e}")
