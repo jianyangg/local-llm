@@ -10,6 +10,7 @@ class CustomLLM:
 
         # For testing with llama3
         self.json_llm = Ollama(model="llama3", temperature=0, format="json", base_url="http://localhost:11434")
+        # TODO: Add additional variable into graph state to keep feedback on the responses from grader, should there be retries.
         self.llm = Ollama(model="llama3", temperature=0.2, base_url="http://localhost:11434")
 
         # ## For testing with phi2
@@ -31,6 +32,8 @@ class CustomLLM:
             str: Either the vectorstore or give up
         """
 
+        # TODO: Include a chat_history prompt to keep track of the conversation: Chat History: ```{history}```"""
+        # TODO: We can store this in the GraphState as well.
         routing_prompt = PromptTemplate(
             # Template for llama3
             template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
