@@ -5,13 +5,15 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.output_parsers import StrOutputParser
 
 class CustomLLM:
-    def __init__(self):
+    def __init__(self, tenant_id: str):
         self.json_parser = JsonOutputParser()
 
         # For testing with llama3
         self.json_llm = Ollama(model="llama3", temperature=0, format="json", base_url="http://localhost:11434")
         # TODO: Add additional variable into graph state to keep feedback on the responses from grader, should there be retries.
         self.llm = Ollama(model="llama3", temperature=0.2, base_url="http://localhost:11434")
+        # TODO: Use this tenant_id when querying documents
+        self.tenant_id = tenant_id
 
         # ## For testing with phi2
         # self.json_llm = Ollama(model="phi", temperature=0, format="json", base_url="http://localhost:11435")

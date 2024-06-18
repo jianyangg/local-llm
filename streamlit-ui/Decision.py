@@ -9,7 +9,7 @@ from langchain_community.vectorstores import Neo4jVector
 from langchain_community.embeddings import OllamaEmbeddings
 
 class Decision:
-    def __init__(self):
+    def __init__(self, tenant_id: str):
 
         # TODO: Temporary code
         # to be replaced with Neo4J implementation and a portal for uploading
@@ -71,7 +71,7 @@ class Decision:
         )
 
         self.retriever = self.vectorstore.as_retriever()
-        self.custom_llm = CustomLLM()
+        self.custom_llm = CustomLLM(tenant_id)
 
 
     def initial_routing(self, state: GraphState):

@@ -2,7 +2,7 @@ from langgraph.graph import END, StateGraph
 from GraphState import GraphState
 from Decision import Decision
 
-def buildChatApp():
+def buildChatApp(tenant_id):
     """
     This function sets up and compiles the workflow for the custom RAG + LLM workflow.
 
@@ -16,7 +16,7 @@ def buildChatApp():
     """
    
     # Initialise the decision class
-    decision = Decision()
+    decision = Decision(tenant_id)
 
     # Intialise the graph
     workflow = StateGraph(GraphState)

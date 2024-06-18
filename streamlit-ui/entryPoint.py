@@ -4,7 +4,7 @@ from workflow import buildChatApp
 import traceback
 import time
 
-def entry(prompt, st):
+def entry(prompt, st, tenant_id):
     """
     The main entry point of the workflow.
 
@@ -19,11 +19,11 @@ def entry(prompt, st):
     # this makes the state global so that we can call write
     # from another function w/o passing the state
 
-    response = generate(prompt, st)
+    response = generate(prompt, st, tenant_id)
     return response
 
 
-def generate(prompt, st):
+def generate(prompt, st, tenant_id):
     """
     Generates the response from the workflow.
 
@@ -37,7 +37,7 @@ def generate(prompt, st):
     inputs = {"question": prompt}
     # this is the compiled workflow,
     # acting as a black box
-    chat_app = buildChatApp()
+    chat_app = buildChatApp(tenant_id)
 
     # run the workflow
     ## there might be errors (llm not producing a json when required)
