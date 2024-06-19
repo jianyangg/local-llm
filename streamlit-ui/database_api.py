@@ -84,7 +84,7 @@ def docParser(file_path):
             print(f"Error: {e}")
 
 # Upload files
-def upload_files(uploaded_files, username=config["neo4j_username"], password=config["neo4j_password"]):
+def upload_files(uploaded_files, tenant_id, username=config["neo4j_username"], password=config["neo4j_password"]):
     combined_doc_splits = []
     for uploaded_file in uploaded_files:
         # documents folder should exist
@@ -95,7 +95,7 @@ def upload_files(uploaded_files, username=config["neo4j_username"], password=con
         print("\n")
         combined_doc_splits.extend(doc_splits)
 
-    print("Writing to database")
+    print("Writing to database in index:", tenant_id)
     # stores the parsed documents in the Neo4j database
     Neo4jVector.from_documents(
         documents=combined_doc_splits,
@@ -104,9 +104,9 @@ def upload_files(uploaded_files, username=config["neo4j_username"], password=con
         password=password,
         embedding=embeddings,
         # this can be varied based on the tenant
-        index_name="parsers_trial_2",
-        node_label="parsersTrial2",
-        pre_delete_collection=True,
+        index_name=tenant_id,
+        node_label=tenant_id,
+        # pre_delete_collection=True,
     )
 
     print("Documents written to database")

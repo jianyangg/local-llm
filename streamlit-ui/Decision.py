@@ -7,6 +7,7 @@ from langchain_community.embeddings import GPT4AllEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Neo4jVector
 from langchain_community.embeddings import OllamaEmbeddings
+import streamlit
 
 class Decision:
     def __init__(self, tenant_id: str):
@@ -48,8 +49,7 @@ class Decision:
             "neo4j_url": "bolt://localhost:7687",
             "neo4j_username": "neo4j",
             "neo4j_password": "password",	
-            "index_name": "parsers_trial_2",
-            "node_label": "parsersTrial2"
+            "index_name": "parsers_trial",
         }
 
         # load embedding model
@@ -58,17 +58,18 @@ class Decision:
             model=neo4j_config["llm_name"]
         )
 
+
+        print("Using vector store for tenant id:", tenant_id)
         # reference document_parsing notebook
         self.vectorstore = Neo4jVector.from_existing_index(
             embeddings,
             url=neo4j_config["neo4j_url"],
             username=neo4j_config["neo4j_username"],
             password=neo4j_config["neo4j_password"],
-            index_name=neo4j_config["index_name"],
-            # node_label=neo4j_config["node_label"],
-            # embedding_node_property="embedding",
-            # text_node_properties="text",
+            index_name=tenant_id,
         )
+
+        print("STATE", streamlit.session_state)
 
         self.retriever = self.vectorstore.as_retriever()
         self.custom_llm = CustomLLM(tenant_id)

@@ -39,7 +39,8 @@ if len(uploaded_files) != 0:
                     st.write("Do not send queries while database is being updated.")
                     # TODO: Tag the tenant id to the uploaded files
                     # TODO: Access this via (st.session_state.username)
-                    database_api.upload_files(uploaded_files)
+                    print(f"Tenant ID: {st.session_state['username']}")
+                    database_api.upload_files(uploaded_files, tenant_id=st.session_state["username"])
                 st.success("Files uploaded successfully.")
             except Exception as e:
                 st.error(f"Error: {e}")
