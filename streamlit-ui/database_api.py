@@ -105,6 +105,7 @@ def upload_files(uploaded_files, tenant_id, username=config["neo4j_username"], p
         embedding=embeddings,
         # this can be varied based on the tenant
         index_name=tenant_id,
+        # required to have node label as well to add another index.
         node_label=tenant_id,
         # pre_delete_collection=True,
     )

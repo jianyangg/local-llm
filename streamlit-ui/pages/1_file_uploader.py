@@ -11,7 +11,55 @@ if not st.session_state.authentication_status:
 
 st.title("Upload a file")
 st.write("Upload a file to the database.")
-st.write("Note: [Beta] The previous database will be cleared and replaced with the new uploaded files.")
+
+# Custom CSS for better styling
+st.markdown("""
+    <style>
+    .stChatInput {
+        margin-bottom: 3px;
+    }
+    .stChatInput input {
+        font-size: 16px;
+        padding: 15px;
+        border-radius: 15px;
+        border: 1px solid #ccc;
+        width: 10%;
+    }
+    .stChatInput input::placeholder {
+        color: #888;
+    }
+    .stButton button {
+        background-color: #003153;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 10px 20px;
+        text-align: center;
+        text-decoration: none;
+        display: inline-block;
+        font-size: 16px;
+        margin: 4px 2px;
+        cursor: pointer;
+    }
+    .user-message {
+        text-align: left;
+        background-color: #003153;
+        color: white;
+        padding: 10px 10px 10px 15px;
+        border-radius: 15px;
+        margin: 10px 3px 10px auto;
+        max-width: 50%;
+    }
+    .assistant-message {
+        text-align: left;
+        background-color: #f1f0f0;
+        padding: 10px 10px 10px 15px;
+        border-radius: 15px;
+        margin: 10px auto 10px 3px;
+        max-width: 70%;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 # accept multiple files
 uploaded_files = st.file_uploader("Choose files", accept_multiple_files=True)
