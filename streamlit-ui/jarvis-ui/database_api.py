@@ -1,14 +1,14 @@
-import os
 from docx import Document as docxDocument
 from langchain.docstore.document import Document as LangchainDocument
 from langchain_community.document_loaders.llmsherpa import LLMSherpaFileLoader
 from langchain_community.vectorstores import Neo4jVector
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+import os
 
-config={"ollama_base_url": "http://localhost:11434",
+config={"ollama_base_url": "http://ollama:11434",
         "llm_name": "llama3",
-        "neo4j_url": "bolt://localhost:7687",
+        "neo4j_url": "bolt://neo4j:7687",
         "neo4j_username": "neo4j",
         "neo4j_password": "password",		
         }
@@ -19,7 +19,7 @@ embeddings = OllamaEmbeddings(
     model=config["llm_name"]
 )
 
-def docParser(file_path):
+def docParser(file_path, st):
     """
     Parses a document file and returns a split up version of the document.
     Requires file type to be reflected in the file extension.
@@ -63,17 +63,16 @@ def docParser(file_path):
 
         try:
             # LLMSherpa loader (requires container nlm-ingest to be running)
-            # nlm-ingest is port forward to 5010
-
             # TODO: Include more metadata into each chunk (i.e., which page is the chunk from)
             loader = LLMSherpaFileLoader(
                 file_path=file_path,
                 new_indent_parser=True,
                 apply_ocr=True,
                 strategy="text", # this can be "chunks" or "html".
-                llmsherpa_api_url="http://localhost:5010/api/parseDocument?renderFormat=all",
+                llmsherpa_api_url="http://nlm-ingestor:5001/api/parseDocument?renderFormat=all",
             )
 
+            st.toast(f"Chunking document {file_path}...")
             docs = loader.load()
 
             doc_splits = text_splitter.split_documents(docs)
@@ -81,16 +80,19 @@ def docParser(file_path):
             return doc_splits
             
         except Exception as e:
-            print(f"Error: {e}")
+            st.write(f"Error: {e}")
 
 # Upload files
-def upload_files(uploaded_files, tenant_id, username=config["neo4j_username"], password=config["neo4j_password"]):
+def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"], password=config["neo4j_password"]):
     combined_doc_splits = []
     for uploaded_file in uploaded_files:
-        # documents folder should exist
         doc_path = f"documents/{uploaded_file.name}"
-        print(f"Processing {doc_path}")
-        doc_splits = docParser(doc_path)
+        st.toast(f"Processing {doc_path}")
+        # check if file exists
+        if not os.path.exists(doc_path):
+            st.write(f"File {doc_path} does not exist.")
+            continue
+        doc_splits = docParser(doc_path, st)
         print(f"Number of splits: {len(doc_splits)}")
         print("\n")
         combined_doc_splits.extend(doc_splits)
@@ -103,11 +105,8 @@ def upload_files(uploaded_files, tenant_id, username=config["neo4j_username"], p
         username=username,
         password=password,
         embedding=embeddings,
-        # this can be varied based on the tenant
         index_name=tenant_id,
-        # required to have node label as well to add another index.
         node_label=tenant_id,
-        # pre_delete_collection=True,
     )
 
     print("Documents written to database")

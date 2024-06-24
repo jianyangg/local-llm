@@ -2,18 +2,16 @@ from GraphState import GraphState
 from CustomLLM import CustomLLM
 from langchain_community.vectorstores import Neo4jVector
 from langchain_community.embeddings import OllamaEmbeddings
-import streamlit
 
 class Decision:
     def __init__(self, tenant_id: str):
 
         neo4j_config={
-            "ollama_base_url": "http://localhost:11434",
+            "ollama_base_url": "http://ollama:11434",
             "llm_name": "llama3",
-            "neo4j_url": "bolt://localhost:7687",
+            "neo4j_url": "bolt://neo4j:7687",
             "neo4j_username": "neo4j",
-            "neo4j_password": "password",	
-            "index_name": "parsers_trial",
+            "neo4j_password": "password",
         }
 
         # load embedding model
@@ -49,8 +47,6 @@ class Decision:
                 node_label=tenant_id,
             )
             print(f"Index created for {tenant_id}")
-
-        print("STATE", streamlit.session_state)
 
         self.retriever = self.vectorstore.as_retriever()
         self.custom_llm = CustomLLM(tenant_id)

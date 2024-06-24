@@ -1,32 +1,24 @@
-from time import sleep
+from flask import Flask, request
 from pprint import pprint
 from workflow import buildChatApp
 import traceback
 import time
 
-def entry(prompt, st, tenant_id, chat_mode="All-Purpose"):
-    """
-    Generates the response from the workflow.
+app = Flask(__name__)
 
-    Args:
-        prompt (str): The prompt to generate a response for
-        st (streamlit): The streamlit object
-        tenant_id (str): The tenant ID
-        chat_mode (str): The chat mode ie All-Purpose, RAG, Chatbot. All-Purpose by default.
-
-    Returns:
-        str: The response from the workflow
-    """
+@app.route('/entry', methods=['POST'])
+def entry_endpoint():
+    data = request.get_json()
+    prompt = data.get('prompt')
+    tenant_id = data.get('tenant_id')
+    chat_mode = data.get('chat_mode', 'All-Purpose')
 
     inputs = {"question": prompt}
-    # this is the compiled workflow,
-    # acting as a black box
     chat_app = buildChatApp(tenant_id, chat_mode)
 
-    # run the workflow
-    ## there might be errors (llm not producing a json when required)
     tries = 0
     max_tries = 3
+    e = "" # error placeholder
     while tries < max_tries:
         try:
             start_time = time.time()
@@ -45,12 +37,11 @@ def entry(prompt, st, tenant_id, chat_mode="All-Purpose"):
         
         except Exception as e:
             tries += 1
-            st.write(f"Error: {e}")
-            st.write(f"Error location: {traceback.format_exc()}")
-            st.write(f"Retrying... {tries}/{max_tries}")
             print(f"Error location: {traceback.format_exc()}")
             print(f"Error: {e}")
             continue
     
-    return "I'm sorry, I'm unable to generate a response at the moment. Please try again later."
+    return f"I'm sorry, I'm unable to generate a response at the moment. Please try again later. Error {e}"
 
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5001)

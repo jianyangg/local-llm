@@ -1,0 +1,9 @@
+async-timeout==4.0.3
+flask==3.0.3
+langchain-community==0.2.5
+langchain-core==0.2.9
+langgraph==0.0.69
+neo4j==5.21.0
+nvidia-cuda-runtime-cu12==12.1.105
+ollama==0.2.1
+requests==2.32.2

@@ -1,6 +1,6 @@
 import streamlit as st
-import time
-from entryPoint import entry
+import requests
+import json
 import streamlit_authenticator as stauth
 import yaml
 from yaml.loader import SafeLoader
@@ -67,23 +67,36 @@ authenticator = stauth.Authenticate(
     config['pre-authorized']
 )
 
-# Streamed response emulator
+# access the response from the orchestrator endpoint
 def response_generator(prompt, tenant_id, chat_mode):
-    response = entry(prompt, st, tenant_id, chat_mode)
-    return response
+    url = "http://orchestrator:5001/entry"
+    # alow correct interpretation of data
+    headers = {
+        "Content-Type": "application/json"
+    }
+    data = {
+        "prompt": prompt,
+        "tenant_id": tenant_id,
+        "chat_mode": chat_mode
+    }
+
+    response = requests.post(url, headers=headers, data=json.dumps(data))
+    response_text = response.content.decode('utf-8')
+
+    return response_text
 
 name, authentication_status, username = authenticator.login('main', fields = {'Form name': 'Welcome to Jarvis.'})
 
 if authentication_status:
     # Add chat mode selection to the sidebar
     with st.sidebar:
-        chat_mode = st.radio("Select chat mode:", ("All-Purpose", "RAG", "Chatbot"))
+        chat_mode = st.radio("Select chat mode:", ("Jarvis", "Semantic Search w Agents", "Semantic Search w/o Agents", "Chatbot"))
     
     authenticator.logout('Logout', 'main')
 
     st.write(f'Welcome *{name}*')
 
-    st.title("Hello, I am Jarvis.")
+    st.title(f"Hello {name.split()[0]}, I am Jarvis.")
 
     # Initialize chat history for each user
     if "users_messages" not in st.session_state:

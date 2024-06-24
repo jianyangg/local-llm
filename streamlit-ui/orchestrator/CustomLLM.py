@@ -1,4 +1,3 @@
-# from langchain_community.chat_models import ChatOllama
 from langchain_community.llms import Ollama
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
@@ -8,16 +7,10 @@ class CustomLLM:
     def __init__(self, tenant_id: str):
         self.json_parser = JsonOutputParser()
 
-        # For testing with llama3
-        self.json_llm = Ollama(model="llama3", temperature=0, format="json", base_url="http://localhost:11434")
+        self.json_llm = Ollama(model="llama3", temperature=0, format="json", base_url="http://ollama:11434")
         # TODO: Add additional variable into graph state to keep feedback on the responses from grader, should there be retries.
-        self.llm = Ollama(model="llama3", temperature=0.2, base_url="http://localhost:11434")
-        # TODO: Use this tenant_id when querying documents
+        self.llm = Ollama(model="llama3", temperature=0.2, base_url="http://ollama:11434")
         self.tenant_id = tenant_id
-
-        # ## For testing with phi2
-        # self.json_llm = Ollama(model="phi", temperature=0, format="json", base_url="http://localhost:11435")
-        # self.llm = Ollama(model="phi", temperature=0.1, base_url="http://localhost:11435")
 
     def initial_router(self, prompt: str):
         """
@@ -30,7 +23,6 @@ class CustomLLM:
             prompt (str): The user prompt to evaluate
 
         Returns:
-            # TODO: this might not be str
             str: Either the vectorstore or give up
         """
 
@@ -240,4 +232,5 @@ class CustomLLM:
         Returns:
             str: The generated response
         """
-        return self.llm.invoke(qn)
+        system_prompt = "<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are called Jarvis. Answer the following question in a helpful, friendly, yet professional manner. <|eot_id|><|start_header_id|>user<|end_header_id|>"
+        return self.llm.invoke(system_prompt + qn + "<|eot_id|><|start_header_id|>assistant<|end_header_id|>")	

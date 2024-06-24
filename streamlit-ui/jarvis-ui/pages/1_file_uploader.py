@@ -61,12 +61,16 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# Display all files in documents folder
+if os.path.exists("documents"):
+    st.write("Files in database:")
+    st.write(os.listdir("documents"))
+
 # accept multiple files
 uploaded_files = st.file_uploader("Choose files", accept_multiple_files=True)
 for uploaded_file in uploaded_files:
     bytes_data = uploaded_file.read()
-    st.write("filename:", uploaded_file.name)
-    # st.write(bytes_data)
+    st.write("Filename:", uploaded_file.name)
 
     # create folder documents if it doesn't exist
     if not os.path.exists("documents"):
@@ -84,11 +88,10 @@ if len(uploaded_files) != 0:
             try:
                 with st.spinner("Uploading..."):
                     # TODO: Make this asynchronous
-                    st.write("Do not send queries while database is being updated.")
-                    # TODO: Tag the tenant id to the uploaded files
-                    # TODO: Access this via (st.session_state.username)
+                    print("PASSED HERE")
+                    st.toast("Do not send queries while database is being updated.")
                     print(f"Tenant ID: {st.session_state['username']}")
-                    database_api.upload_files(uploaded_files, tenant_id=st.session_state["username"])
+                    database_api.upload_files(uploaded_files, st, tenant_id=st.session_state["username"])
                 st.success("Files uploaded successfully.")
             except Exception as e:
                 st.error(f"Error: {e}")
