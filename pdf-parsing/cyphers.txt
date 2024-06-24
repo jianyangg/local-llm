@@ -1,0 +1,27 @@
+MERGE (n:tenant1:Person {id: "sarahjohnson"}) ON CREATE SET n.name = "Sarah Johnson", n.summary = "", n.additional_properties = ""
+MERGE (n:tenant1:Person {id: "davidpatel"}) ON CREATE SET n.name = "David Patel", n.summary = "", n.additional_properties = ""
+MERGE (n:tenant1:Person {id: "amandarodriguez"}) ON CREATE SET n.name = "Amanda Rodriguez", n.summary = "", n.additional_properties = ""
+MERGE (n:tenant1:Skill {id: "machinelearning"}) ON CREATE SET n.name = "Machine Learning", n.summary = "", n.additional_properties = ""
+MERGE (n:tenant1:Skill {id: "dataanalytics"}) ON CREATE SET n.name = "Data Analytics", n.summary = "", n.additional_properties = ""
+MERGE (n:tenant1:Skill {id: "azure"}) ON CREATE SET n.name = "Azure", n.summary = "", n.additional_properties = ""
+MERGE (n:tenant1:Skill {id: "python"}) ON CREATE SET n.name = "Python", n.summary = "", n.additional_properties = ""
+MERGE (n:tenant1:Skill {id: "aws"}) ON CREATE SET n.name = "AWS", n.summary = "", n.additional_properties = ""
+MERGE (n:tenant1:Skill {id: "cloudcomputing"}) ON CREATE SET n.name = "Cloud Computing", n.summary = "", n.additional_properties = ""
+MERGE (n:tenant1:Skill {id: "devops"}) ON CREATE SET n.name = "DevOps", n.summary = "", n.additional_properties = ""
+MERGE (n:tenant1:Skill {id: "datawarehousing"}) ON CREATE SET n.name = "Data Warehousing", n.summary = "", n.additional_properties = ""
+MERGE (n:tenant1:Skill {id: "datasecurity"}) ON CREATE SET n.name = "Data Security", n.summary = "", n.additional_properties = ""
+MERGE (n:tenant1:Skill {id: "compliance"}) ON CREATE SET n.name = "Compliance", n.summary = "", n.additional_properties = ""
+MERGE (n:tenant1:Skill {id: "healthcareregulations"}) ON CREATE SET n.name = "Healthcare Regulations", n.summary = "", n.additional_properties = ""
+MERGE (a:tenant1:Person {id: "sarahjohnson"}) MERGE (b:Skill {id: "machinelearning"}) MERGE (a)-[:HAS_SKILL]->(b)
+MERGE (a:tenant1:Person {id: "sarahjohnson"}) MERGE (b:Skill {id: "dataanalytics"}) MERGE (a)-[:HAS_SKILL]->(b)
+MERGE (a:tenant1:Person {id: "sarahjohnson"}) MERGE (b:Skill {id: "azure"}) MERGE (a)-[:HAS_SKILL]->(b)
+MERGE (a:tenant1:Person {id: "sarahjohnson"}) MERGE (b:Skill {id: "python"}) MERGE (a)-[:HAS_SKILL]->(b)
+MERGE (a:tenant1:Person {id: "davidpatel"}) MERGE (b:Skill {id: "aws"}) MERGE (a)-[:HAS_SKILL]->(b)
+MERGE (a:tenant1:Person {id: "davidpatel"}) MERGE (b:Skill {id: "cloudcomputing"}) MERGE (a)-[:HAS_SKILL]->(b)
+MERGE (a:tenant1:Person {id: "davidpatel"}) MERGE (b:Skill {id: "devops"}) MERGE (a)-[:HAS_SKILL]->(b)
+MERGE (a:tenant1:Person {id: "davidpatel"}) MERGE (b:Skill {id: "datawarehousing"}) MERGE (a)-[:HAS_SKILL]->(b)
+MERGE (a:tenant1:Person {id: "amandarodriguez"}) MERGE (b:Skill {id: "datasecurity"}) MERGE (a)-[:HAS_SKILL]->(b)
+MERGE (a:tenant1:Person {id: "amandarodriguez"}) MERGE (b:Skill {id: "compliance"}) MERGE (a)-[:HAS_SKILL]->(b)
+MERGE (a:tenant1:Person {id: "amandarodriguez"}) MERGE (b:Skill {id: "healthcareregulations"}) MERGE (a)-[:HAS_SKILL]->(b)
+MERGE (a:tenant1:Person {id: "amandarodriguez"}) MERGE (b:Skill {id: "azure"}) MERGE (a)-[:HAS_SKILL]->(b)
+MERGE (a:tenant1:Person {id: "sarahjohnson"}) MERGE (b:Skill {id: "BetaHealth Secure Healthcare Data Analytics Platform on Azure"}) MERGE (a)-[:WORKED_ON_PROJECT]->(b)

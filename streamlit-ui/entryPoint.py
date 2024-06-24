@@ -4,31 +4,15 @@ from workflow import buildChatApp
 import traceback
 import time
 
-def entry(prompt, st):
-    """
-    The main entry point of the workflow.
-
-    Args:
-        streamlit_obj (streamlit): The streamlit object
-
-    Returns:
-        str: The response from the workflow
-
-    """
-
-    # this makes the state global so that we can call write
-    # from another function w/o passing the state
-
-    response = generate(prompt, st)
-    return response
-
-
-def generate(prompt, st):
+def entry(prompt, st, tenant_id, chat_mode="All-Purpose"):
     """
     Generates the response from the workflow.
 
     Args:
-        prompt (str): The prompt to generate the response from
+        prompt (str): The prompt to generate a response for
+        st (streamlit): The streamlit object
+        tenant_id (str): The tenant ID
+        chat_mode (str): The chat mode ie All-Purpose, RAG, Chatbot. All-Purpose by default.
 
     Returns:
         str: The response from the workflow
@@ -37,7 +21,7 @@ def generate(prompt, st):
     inputs = {"question": prompt}
     # this is the compiled workflow,
     # acting as a black box
-    chat_app = buildChatApp()
+    chat_app = buildChatApp(tenant_id, chat_mode)
 
     # run the workflow
     ## there might be errors (llm not producing a json when required)
@@ -52,7 +36,7 @@ def generate(prompt, st):
                     pprint(value)
                     print()
 
-                # return the response to animate
+                # If response takes longer than 60s, return a timeout error
                 if time.time() - start_time > 60:
                     print(TimeoutError("Process took too long to complete"))
                     return "I'm sorry, I'm unable to generate a response at the moment. Please try again later or change your prompt."

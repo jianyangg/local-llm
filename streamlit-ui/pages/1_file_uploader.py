@@ -4,9 +4,62 @@ import database_api
 
 st.set_page_config(page_title="file_uploader", page_icon="📂")
 
+# Prevents users from uploading before signing in.
+if not st.session_state.authentication_status:
+    st.info('Please Login from the Home page and try again.')
+    st.stop()
+
 st.title("Upload a file")
 st.write("Upload a file to the database.")
-st.write("Note: [Beta] The previous database will be cleared and replaced with the new uploaded files.")
+
+# Custom CSS for better styling
+st.markdown("""
+    <style>
+    .stChatInput {
+        margin-bottom: 3px;
+    }
+    .stChatInput input {
+        font-size: 16px;
+        padding: 15px;
+        border-radius: 15px;
+        border: 1px solid #ccc;
+        width: 10%;
+    }
+    .stChatInput input::placeholder {
+        color: #888;
+    }
+    .stButton button {
+        background-color: #003153;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 10px 20px;
+        text-align: center;
+        text-decoration: none;
+        display: inline-block;
+        font-size: 16px;
+        margin: 4px 2px;
+        cursor: pointer;
+    }
+    .user-message {
+        text-align: left;
+        background-color: #003153;
+        color: white;
+        padding: 10px 10px 10px 15px;
+        border-radius: 15px;
+        margin: 10px 3px 10px auto;
+        max-width: 50%;
+    }
+    .assistant-message {
+        text-align: left;
+        background-color: #f1f0f0;
+        padding: 10px 10px 10px 15px;
+        border-radius: 15px;
+        margin: 10px auto 10px 3px;
+        max-width: 70%;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 # accept multiple files
 uploaded_files = st.file_uploader("Choose files", accept_multiple_files=True)
@@ -32,7 +85,10 @@ if len(uploaded_files) != 0:
                 with st.spinner("Uploading..."):
                     # TODO: Make this asynchronous
                     st.write("Do not send queries while database is being updated.")
-                    database_api.upload_files(uploaded_files)
+                    # TODO: Tag the tenant id to the uploaded files
+                    # TODO: Access this via (st.session_state.username)
+                    print(f"Tenant ID: {st.session_state['username']}")
+                    database_api.upload_files(uploaded_files, tenant_id=st.session_state["username"])
                 st.success("Files uploaded successfully.")
             except Exception as e:
                 st.error(f"Error: {e}")

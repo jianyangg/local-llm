@@ -1,0 +1,26 @@
+# passwords are generated using the following
+# import streamlit_authenticator as stauth
+# from streamlit_authenticator.utilities.hasher import Hasher
+# hashed_passwords = Hasher(['abc', 'def']).generate()
+
+credentials:
+  usernames:
+    jsmith:
+      email: jsmith@gmail.com
+      failed_login_attempts: 0 # Will be managed automatically
+      logged_in: False # Will be managed automatically
+      name: John Smith
+      password: $2b$12$FW7uLRmjAfAP4KV3kajBcuSNPEt1.d.Nff1rTAAfK3rSCT6qelmnW # Will be hashed automatically
+    rbriggs:
+      email: rbriggs@gmail.com
+      failed_login_attempts: 0 # Will be managed automatically
+      logged_in: False # Will be managed automatically
+      name: Rebecca Briggs
+      password: $2b$12$HgVlxEBzwWdQPFYZYwwZWu6yfXqQ1uzZW2rUyKlfWXb39UXBubvQ. # Will be hashed automatically
+cookie:
+  expiry_days: 30
+  key: some_signature_key # Must be string
+  name: some_cookie_name
+pre-authorized:
+  emails:
+  - melsby@gmail.com

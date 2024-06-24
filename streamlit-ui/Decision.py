@@ -1,46 +1,11 @@
 from GraphState import GraphState
 from CustomLLM import CustomLLM
-from langchain_community.document_loaders import WebBaseLoader
-# from langchain_community.vectorstores import Chroma
-# from chromadb import HttpClient
-from langchain_community.embeddings import GPT4AllEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Neo4jVector
 from langchain_community.embeddings import OllamaEmbeddings
+import streamlit
 
 class Decision:
-    def __init__(self):
-
-        # TODO: Temporary code
-        # to be replaced with Neo4J implementation and a portal for uploading
-        # documents in the vector database
-        # urls = [
-        #     "https://lilianweng.github.io/posts/2023-06-23-agent/",
-        #     "https://lilianweng.github.io/posts/2023-03-15-prompt-engineering/",
-        #     "https://lilianweng.github.io/posts/2023-10-25-adv-attack-llm/",
-        # ]
-
-        # docs = [WebBaseLoader(url, requests_per_second=1).load() for url in urls]
-        # docs_list = [item for sublist in docs for item in sublist]
-
-        # text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        #     chunk_size=250, chunk_overlap=0
-        # )
-        # doc_splits = text_splitter.split_documents(docs_list)
-
-        # model_name = "all-MiniLM-L6-v2.gguf2.f16.gguf"
-        # gpt4all_kwargs = {'allow_download': 'True'}
-        # embeddings = GPT4AllEmbeddings(
-        #     model_name=model_name,
-        #     gpt4all_kwargs=gpt4all_kwargs
-        # )
-
-        # # Add to vectorDB
-        # vectorstore = Chroma.from_documents(
-        #     documents=doc_splits,
-        #     collection_name="rag-chroma",
-        #     embedding=embeddings,
-        # )
+    def __init__(self, tenant_id: str):
 
         neo4j_config={
             "ollama_base_url": "http://localhost:11434",
@@ -48,8 +13,7 @@ class Decision:
             "neo4j_url": "bolt://localhost:7687",
             "neo4j_username": "neo4j",
             "neo4j_password": "password",	
-            "index_name": "parsers_trial_2",
-            "node_label": "parsersTrial2"
+            "index_name": "parsers_trial",
         }
 
         # load embedding model
@@ -58,20 +22,38 @@ class Decision:
             model=neo4j_config["llm_name"]
         )
 
-        # reference document_parsing notebook
-        self.vectorstore = Neo4jVector.from_existing_index(
-            embeddings,
-            url=neo4j_config["neo4j_url"],
-            username=neo4j_config["neo4j_username"],
-            password=neo4j_config["neo4j_password"],
-            index_name=neo4j_config["index_name"],
-            # node_label=neo4j_config["node_label"],
-            # embedding_node_property="embedding",
-            # text_node_properties="text",
-        )
+
+        print("Using vector store for tenant id:", tenant_id)
+
+        # TOOD: Bad practice to use exceptions as part of logic.
+        try: 
+            # reference document_parsing notebook
+            self.vectorstore = Neo4jVector.from_existing_index(
+                embeddings,
+                url=neo4j_config["neo4j_url"],
+                username=neo4j_config["neo4j_username"],
+                password=neo4j_config["neo4j_password"],
+                index_name=tenant_id,
+                node_label=tenant_id,
+            )
+        except Exception as e:
+            print("Error:", e)
+            print("Index does not exist. Creating index...")
+            self.vectorstore = Neo4jVector.from_documents(
+                documents="",
+                url=neo4j_config["neo4j_url"],
+                username=neo4j_config["neo4j_username"],
+                password=neo4j_config["neo4j_password"],
+                embedding=embeddings,
+                index_name=tenant_id,
+                node_label=tenant_id,
+            )
+            print(f"Index created for {tenant_id}")
+
+        print("STATE", streamlit.session_state)
 
         self.retriever = self.vectorstore.as_retriever()
-        self.custom_llm = CustomLLM()
+        self.custom_llm = CustomLLM(tenant_id)
 
 
     def initial_routing(self, state: GraphState):
@@ -225,7 +207,7 @@ class Decision:
         if documents:
             context = "\n\n".join(doc.page_content for doc in documents)
         else:
-            context = "No relevant documents found. Answer solely based off the prompt given."
+            context = "No relevant documents found."
 
         generated_answer = self.custom_llm.answer_generator(context=context, qn=question)
         # Only the last item is generated in this function
@@ -273,18 +255,19 @@ class Decision:
         documents = state["documents"]
         generation = state["generation"]
 
-        # if no documents, we can't grade the generation w.r.t. documents
-        # so run answer_grader only
+        # no relevant documents found.
         if not documents:
-            print("No documents to grade.")
-            score = self.custom_llm.answer_grader(generated_answer=generation, qn=question)
-            grade = score["score"]
-            if grade == "yes":
-                print("Verdict: Generated answer is useful.")
-                return "useful"
-            else:
-                print("Verdict: Generated answer is not useful.")
-                return "not useful"
+            # print("No documents to grade.")
+            # score = self.custom_llm.answer_grader(generated_answer=generation, qn=question)
+            # grade = score["score"]
+            # if grade == "yes":
+            #     print("Verdict: Generated answer is useful.")
+            #     return "useful"
+            # else:
+            #     print("Verdict: Generated answer is not useful.")
+            #     return "not useful"
+            print("Verdict: No relevant documents found.")
+            return "not useful"
 
         score = self.custom_llm.hallucination_grader(
             generated_answer=generation, documents=documents
@@ -305,7 +288,26 @@ class Decision:
                 return "useful"
             else:
                 print("Verdict: Generated answer is not useful.")
+                # Answer grounded in documents but NOT useful
+                # Generate answer solely using LLM.
                 return "not useful"
         else:
             print("Verdict: Generated answer is not grounded in documents.")
+            # Regenerate answer using documents
             return "not supported"
+            
+    def generate_llm_only(self, state):
+        """
+        Generate answer without the need for documents.
+        
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            str: The generated answer
+        """
+
+        print("Generating answer without RAG...")
+        question = state["question"]
+        generated_answer = self.custom_llm.llm_only(qn=question)
+        return {"generation": generated_answer}
