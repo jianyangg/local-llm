@@ -4,6 +4,8 @@ import json
 import streamlit_authenticator as stauth
 import yaml
 from yaml.loader import SafeLoader
+from utils import generate_tenant_id
+from streamlit_authenticator.utilities.hasher import Hasher
 
 st.set_page_config(page_title="Jarvis", page_icon="🤖")
 
@@ -56,7 +58,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-with open('config.yaml') as file:
+with open('auth/config.yaml') as file:
     config = yaml.load(file, Loader=SafeLoader)
 
 authenticator = stauth.Authenticate(
@@ -85,9 +87,39 @@ def response_generator(prompt, tenant_id, chat_mode):
 
     return response_text
 
-name, authentication_status, username = authenticator.login('main', fields = {'Form name': 'Welcome to Jarvis.'})
+def login():
+    name, authentication_status, username = authenticator.login('main', fields = {'Form name': 'Welcome to Jarvis.'})
 
-if authentication_status:
+    if authentication_status:
+        home(username, name)
+
+    elif authentication_status == False:
+        st.error('Username/password is incorrect')
+    elif authentication_status == None:
+        st.warning('Please enter your username and password')
+
+def register():
+    # entered fields are temporarily stored in cookies
+    try:
+        email_of_registered_user, username_of_registered_user, name_of_registered_user = authenticator.register_user('main', pre_authorization=False)
+        if email_of_registered_user:
+            with open('auth/config.yaml', 'w') as file:
+                yaml.dump(config, file, default_flow_style=False)
+
+            st.success('User registered successfully. Login to continue.')
+
+    except Exception as e:
+        st.error(e)
+
+def auth(selection):
+    if selection == "Login":
+        login()
+    elif selection == "Register":
+        register()
+    else:
+        st.error('Please select an option')
+
+def home(username, name):
     # Add chat mode selection to the sidebar
     with st.sidebar:
         chat_mode = st.radio("Select chat mode:", ("Jarvis", "Semantic Search w Agents", "Semantic Search w/o Agents", "Chatbot"))
@@ -109,9 +141,9 @@ if authentication_status:
     # Display chat messages from history on app rerun
     for message in st.session_state.users_messages[username]:
         if message["role"] == "user":
-            st.markdown(f'<div class="user-message"><strong>You</strong><br> {message["content"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="user-message"><strong>You</strong><p>{message["content"]}</p></div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="assistant-message"><strong>Jarvis</strong><br> {message["content"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="assistant-message"><strong>Jarvis</strong><p>{message["content"]}</p></div>', unsafe_allow_html=True)
 
     # Accept user input
     if prompt := st.chat_input(placeholder=f"Message Jarvis (mode: {chat_mode})", key="chat_input"):
@@ -119,17 +151,26 @@ if authentication_status:
         st.session_state.users_messages[username].append({"role": "user", "content": prompt})
 
         # Display user message in chat message container
-        st.markdown(f'<div class="user-message"><strong>You</strong><br> {prompt}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="user-message"><strong>You</strong><p>{prompt}</p></div>', unsafe_allow_html=True)
 
         with st.spinner("_Kicking into action..._"):
-            response = response_generator(prompt=prompt, tenant_id=username, chat_mode=chat_mode)
+            # Generate tenant_id based off username and password combination
+            user_hashed_password = config['credentials']['usernames'][username]['password']
+            tenant_id = generate_tenant_id(username, user_hashed_password)
+            response = response_generator(prompt=prompt, tenant_id=tenant_id, chat_mode=chat_mode)
             # Display assistant response in chat message container
-            st.markdown(f'<div class="assistant-message"><strong>Jarvis</strong><br> {response}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="assistant-message"><strong>Jarvis</strong><p>{response}</p></div>', unsafe_allow_html=True)
 
         # Add assistant response to chat history
         st.session_state.users_messages[username].append({"role": "assistant", "content": response})
 
-elif authentication_status == False:
-    st.error('Username/password is incorrect')
-elif authentication_status == None:
-    st.warning('Please enter your username and password')
+if not st.session_state['authentication_status']:
+    tab1, tab2 = st.tabs(["Login", "Register"])
+    with tab1:
+        auth("Login")
+    with tab2:
+        auth("Register")
+else:
+    username = st.session_state["username"]
+    name = st.session_state["name"]
+    home(username, name)

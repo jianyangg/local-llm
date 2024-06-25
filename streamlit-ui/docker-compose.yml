@@ -7,6 +7,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8501:8501"
+    volumes:
+      - ./jarvis-ui/auth/config.yaml:/app/auth/config.yaml
     depends_on:
       - nlm-ingestor # for chunking during uploading
 
@@ -57,3 +59,5 @@ services:
 
 volumes:
   ollama:
+  jarvis-ui:
+  neo4j:

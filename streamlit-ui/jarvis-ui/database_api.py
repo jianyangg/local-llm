@@ -32,6 +32,7 @@ def docParser(file_path, st):
     """
 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=750, chunk_overlap=20)
+    file_name = os.path.basename(file_path)
 
     # This assumes that we can tell file type from file extension
     # May not work for linux based systems
@@ -39,6 +40,7 @@ def docParser(file_path, st):
     if file_path.endswith('.docx'):
         doc_splits = []
         doc = docxDocument(file_path)
+
         para_num = 0
         for para in doc.paragraphs:
             if not para.text:
@@ -72,7 +74,7 @@ def docParser(file_path, st):
                 llmsherpa_api_url="http://nlm-ingestor:5001/api/parseDocument?renderFormat=all",
             )
 
-            st.toast(f"Chunking document {file_path}...")
+            st.toast(f"Chunking document {file_name}...")
             docs = loader.load()
 
             doc_splits = text_splitter.split_documents(docs)
@@ -84,13 +86,14 @@ def docParser(file_path, st):
 
 # Upload files
 def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"], password=config["neo4j_password"]):
+    
     combined_doc_splits = []
     for uploaded_file in uploaded_files:
-        doc_path = f"documents/{uploaded_file.name}"
-        st.toast(f"Processing {doc_path}")
+        doc_path = f"documents/{tenant_id}/{uploaded_file.name}"
+        st.toast(f"Processing {uploaded_file.name}")
         # check if file exists
         if not os.path.exists(doc_path):
-            st.write(f"File {doc_path} does not exist.")
+            st.error(f"File {uploaded_file.name} does not exist in {doc_path}.")
             continue
         doc_splits = docParser(doc_path, st)
         print(f"Number of splits: {len(doc_splits)}")
@@ -98,16 +101,19 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
         combined_doc_splits.extend(doc_splits)
 
     print("Writing to database in index:", tenant_id)
-    # stores the parsed documents in the Neo4j database
-    Neo4jVector.from_documents(
-        documents=combined_doc_splits,
-        url=config["neo4j_url"],
-        username=username,
-        password=password,
-        embedding=embeddings,
-        index_name=tenant_id,
-        node_label=tenant_id,
-    )
+    try:
+        # stores the parsed documents in the Neo4j database
+        Neo4jVector.from_documents(
+            documents=combined_doc_splits,
+            url=config["neo4j_url"],
+            username=username,
+            password=password,
+            embedding=embeddings,
+            index_name=tenant_id,
+            node_label=tenant_id,
+        )
+    except Exception as e:
+        st.error(f"Error: {e}")
 
     print("Documents written to database")
 
