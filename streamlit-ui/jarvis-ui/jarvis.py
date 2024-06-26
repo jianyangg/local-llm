@@ -53,7 +53,7 @@ st.markdown("""
         padding: 10px 10px 10px 15px;
         border-radius: 15px;
         margin: 10px auto 10px 3px;
-        max-width: 70%;
+        max-width: 100%;
     }
     </style>
     """, unsafe_allow_html=True)
