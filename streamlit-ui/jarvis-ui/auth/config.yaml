@@ -18,8 +18,14 @@ credentials:
       password: $2b$12$ui/4UG9RROoiCJ8n89ZnQOGVY33JlRYrUyZZGjKzbAZtIWqOVv5Y.
     user2:
       email: user2@gmail.com
+      failed_login_attempts: 0
       logged_in: false
       name: user two
       password: $2b$12$DtDhDhd9jGq7BORJHQ/M/uJZC8pHqG.MQ648P7PshSe9w84PwYkDi
+    user3:
+      email: user3@gmail.com
+      logged_in: false
+      name: user three
+      password: $2b$12$d825RNSleij5uwbnwPm8IePwjAqwoL6NcwBYK5UBTyCKa3k/ugl2O
 pre-authorized:
   emails: null
