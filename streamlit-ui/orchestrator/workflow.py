@@ -24,6 +24,7 @@ def buildChatApp(tenant_id, chat_mode):
 
     # ## TODO: This is a temporary implementation for direct RAG.
     if chat_mode == "Semantic Search w/o Agents":
+        print("Building Semantic Search w/o Agents")
         workflow.add_node("retrieve_documents", decision.retrieve_documents)  # retrieve documents
         workflow.add_node("generate", decision.generate_answer)  # generate
         workflow.set_entry_point("retrieve_documents")

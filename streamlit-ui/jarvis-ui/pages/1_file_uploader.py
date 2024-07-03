@@ -22,11 +22,11 @@ try:
 
     username = st.session_state["username"]
     try:
-        password = config["credentials"]["usernames"][username]["password"]
+        hashed_password = config["credentials"]["usernames"][username]["password"]
     except KeyError as e:
         st.error(f"Error: {e}")
 
-    tenant_id = generate_tenant_id(username, password)
+    tenant_id = generate_tenant_id(username, hashed_password)
 
     # Custom CSS for better styling
     st.markdown("""
@@ -109,9 +109,10 @@ try:
                         # TODO: Might want to save the uploaded files here instead, else it's saved even for files that will be deleted
                         st.toast("Do not send queries while database is being updated.")
                         print(f"Tenant Name: {st.session_state['username']}")
-                        database_api.upload_files(uploaded_files, st, tenant_id=tenant_id)
-                    st.success("Files uploaded successfully.")
+                        isSuccess = database_api.upload_files(uploaded_files, st, tenant_id=tenant_id)
+                    st.write(f"File upload status: {'Success' if isSuccess else 'Failed'}")
                 except Exception as e:
+                    st.error("UPLOAD ERROR!")
                     st.error(f"Error: {e}")
 
 except Exception as e:

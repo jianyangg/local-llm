@@ -5,7 +5,6 @@ import streamlit_authenticator as stauth
 import yaml
 from yaml.loader import SafeLoader
 from utils import generate_tenant_id
-from streamlit_authenticator.utilities.hasher import Hasher
 
 st.set_page_config(page_title="Jarvis", page_icon="🤖")
 
@@ -71,8 +70,9 @@ authenticator = stauth.Authenticate(
 
 # access the response from the orchestrator endpoint
 def response_generator(prompt, tenant_id, chat_mode):
+    print("Querying orchestrator...")
     url = "http://orchestrator:5001/entry"
-    # alow correct interpretation of data
+    # allow correct interpretation of data
     headers = {
         "Content-Type": "application/json"
     }
@@ -84,8 +84,15 @@ def response_generator(prompt, tenant_id, chat_mode):
 
     response = requests.post(url, headers=headers, data=json.dumps(data))
     response_text = response.content.decode('utf-8')
-
+    print("Response~:", response_text)
     return response_text
+
+def fetch_image_paths():
+    url = "http://orchestrator:5001/images"
+    response = requests.get(url)
+    data = response.json()
+    image_paths = data["images"]
+    return image_paths
 
 def login():
     name, authentication_status, username = authenticator.login('main', fields = {'Form name': 'Welcome to Jarvis.'})
@@ -153,13 +160,23 @@ def home(username, name):
         # Display user message in chat message container
         st.markdown(f'<div class="user-message"><strong>You</strong><p>{prompt}</p></div>', unsafe_allow_html=True)
 
-        with st.spinner("_Kicking into action..._"):
+        with st.spinner("_Kicking into action..._"):            
             # Generate tenant_id based off username and password combination
             user_hashed_password = config['credentials']['usernames'][username]['password']
             tenant_id = generate_tenant_id(username, user_hashed_password)
             response = response_generator(prompt=prompt, tenant_id=tenant_id, chat_mode=chat_mode)
             # Display assistant response in chat message container
             st.markdown(f'<div class="assistant-message"><strong>Jarvis</strong><p>{response}</p></div>', unsafe_allow_html=True)
+        
+        with st.sidebar:
+            # fetch images from orchestrator
+            st.info("Sources used")
+            # list all image paths
+            # image_paths = fetch_image_paths()
+            # for image_path in image_paths:
+            #     st.write(image_path)
+            #     st.image(f"http://orchestrator:5001/{image_path}", use_column_width=True)
+            
 
         # Add assistant response to chat history
         st.session_state.users_messages[username].append({"role": "assistant", "content": response})

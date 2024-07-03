@@ -1,4 +1,5 @@
 import hashlib
+import os
 
 def generate_hasher(unique_id):
     # Create a new sha256 hash object

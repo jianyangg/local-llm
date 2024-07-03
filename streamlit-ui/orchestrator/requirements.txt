@@ -1,9 +1,13 @@
 async-timeout==4.0.3
 flask==3.0.3
-langchain-community==0.2.5
-langchain-core==0.2.9
+langchain-community==0.2.6
+langchain-core==0.2.10
 langgraph==0.0.69
 neo4j==5.21.0
 nvidia-cuda-runtime-cu12==12.1.105
 ollama==0.2.1
 requests==2.32.2
+flashrank==0.2.6
+llama-cpp-python==0.2.76
+pdf2image==1.17.0
+PyMuPDF==1.24.7
