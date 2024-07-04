@@ -2,35 +2,30 @@ from GraphState import GraphState
 from CustomLLM import CustomLLM
 from langchain_community.vectorstores import Neo4jVector
 from langchain_community.embeddings import OllamaEmbeddings
+from flashrank import Ranker, RerankRequest
+from langchain.docstore.document import Document as LangchainDocument
+from app_config import config
+
 
 class Decision:
     def __init__(self, tenant_id: str):
-
-        neo4j_config={
-            "ollama_base_url": "http://ollama:11434",
-            "llm_name": "llama3",
-            "neo4j_url": "bolt://neo4j:7687",
-            "neo4j_username": "neo4j",
-            "neo4j_password": "password",
-        }
-
         # load embedding model
         embeddings = OllamaEmbeddings(
-            base_url=neo4j_config["ollama_base_url"],	
-            model=neo4j_config["llm_name"]
+            base_url=config["ollama_base_url"],	
+            model=config["llm_name"]
         )
-
 
         print("Using vector store for tenant id:", tenant_id)
 
         # TOOD: Bad practice to use exceptions as part of logic.
         try: 
+            print("Trying to fetch from existing index...")
             # reference document_parsing notebook
             self.vectorstore = Neo4jVector.from_existing_index(
                 embeddings,
-                url=neo4j_config["neo4j_url"],
-                username=neo4j_config["neo4j_username"],
-                password=neo4j_config["neo4j_password"],
+                url=config["neo4j_url"],
+                username=config["neo4j_username"],
+                password=config["neo4j_password"],
                 index_name=tenant_id,
                 node_label=tenant_id,
             )
@@ -39,18 +34,18 @@ class Decision:
             print("Index does not exist. Creating index...")
             self.vectorstore = Neo4jVector.from_documents(
                 documents="",
-                url=neo4j_config["neo4j_url"],
-                username=neo4j_config["neo4j_username"],
-                password=neo4j_config["neo4j_password"],
+                url=config["neo4j_url"],
+                username=config["neo4j_username"],
+                password=config["neo4j_password"],
                 embedding=embeddings,
                 index_name=tenant_id,
                 node_label=tenant_id,
             )
             print(f"Index created for {tenant_id}")
 
-        self.retriever = self.vectorstore.as_retriever()
+        self.retriever = self.vectorstore.as_retriever(search_kwargs={'k': 25, 'fetch_k': 50, 'score_threshold': 0.6})
         self.custom_llm = CustomLLM(tenant_id)
-
+        self.ranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="cache")
 
     def initial_routing(self, state: GraphState):
         """
@@ -112,7 +107,6 @@ class Decision:
     def retrieve_documents(self, state):
         """
         Retrieve documents from vectorstore
-        TODO: To be replaced with Neo4J database
 
         Args:
             state (dict): The current graph state
@@ -125,19 +119,70 @@ class Decision:
         question = state["question"]
 
         # Retrieval
-        ## use our vector db to fetch documents relevant to our question
+        # # use our vector db to fetch documents relevant to our question
         # documents = self.retriever.invoke(question, top_k=10)
 
-        # for each document, calculate the score for similarity to the question
-        docs_with_score = self.vectorstore.similarity_search_with_score(question, k=10)
-        for doc, score in docs_with_score:
-            print("-" * 80)
-            print("Score: ", score)
-            print(doc.page_content)
-            print("-" * 80)
+        # # for each document, calculate the score for similarity to the question
+        # docs_with_score = self.vectorstore.similarity_search_with_score(question, k=10)
+        # for doc, score in docs_with_score:
+        #     print("-" * 80)
+        #     print("Score: ", score)
+        #     print(doc.page_content)
+        #     print("-" * 80)
 
-        documents = [doc for doc, _ in docs_with_score]
-        return {"documents": documents, "question": question}
+        # final_docs = [doc for doc, _ in docs_with_score]
+
+        def docs_to_passages(docs):
+            idx = 0
+            passages = []
+            for doc in docs:
+                passages.append({
+                    "id": idx,
+                    "text": doc.page_content,
+                    "meta": doc.metadata
+                })
+                idx += 1
+            return passages
+        
+        def passages_to_langchainDocument(passages):
+            docs = []
+            for passage in passages:
+                docs.append(LangchainDocument(page_content=passage['text'], metadata=passage['meta']))
+            return docs
+        
+        def pretty_print_docs(docs):
+            print(
+                f"\n{'-' * 100}\n".join(
+                    [
+                        f"Document {i+1}:\n\n{d.page_content}\nMetadata: {d.metadata}"
+                        for i, d in enumerate(docs)
+                    ]
+                )
+            )
+
+        docs = self.retriever.invoke(question)
+        print("Number of preliminary docs retrieved:", len(docs))
+
+        if len(docs) != 0:
+            # Using reranker
+            rerankrequest = RerankRequest(query=question, passages=docs_to_passages(docs))
+            ranked_passages = self.ranker.rerank(rerankrequest)
+
+            print("Number of reranked docs:", len(ranked_passages))
+            # Exclude scores below 0.8
+            filtered_ranked_passages = [doc for doc in ranked_passages if doc['score'] >= 0.8]
+            # If query isn't specific enough, the score will be very low. In this case, we can use the top 5 docs.
+            filtered_ranked_passages = filtered_ranked_passages if len(filtered_ranked_passages) > 3 else ranked_passages[:10]
+            print("Number of filtered ranked passages:", len(filtered_ranked_passages))
+            final_docs = passages_to_langchainDocument(filtered_ranked_passages)
+
+            print(f"Final: Documents retrieved: {len(final_docs)}")
+            pretty_print_docs(final_docs)
+        else:
+            final_docs = []
+            print("Final: No documents retrieved.")
+
+        return {"documents": final_docs, "question": question}
 
 
     def grade_documents(self, state):
@@ -199,16 +244,22 @@ class Decision:
         question = state["question"]
         documents = state["documents"]
 
-        # Concatenate all documents
-        if documents:
-            context = "\n\n".join(doc.page_content for doc in documents)
-        else:
-            context = "No relevant documents found."
+        # limit due to limited context length of llm
+        limit = 7500
+
+        # process documents stored in the compressed_docs
+        docs = [doc.page_content for doc in documents]
+        context = "\n\n---\n\n".join(docs)
+
+        # remove all text past limit
+        context = context[:limit]
+        
+        print("Context:", context)
 
         generated_answer = self.custom_llm.answer_generator(context=context, qn=question)
+
         # Only the last item is generated in this function
         return {"documents": documents, "question": question, "generation": generated_answer}
-
 
     def decide_to_generate(self, state):
         """
@@ -253,15 +304,6 @@ class Decision:
 
         # no relevant documents found.
         if not documents:
-            # print("No documents to grade.")
-            # score = self.custom_llm.answer_grader(generated_answer=generation, qn=question)
-            # grade = score["score"]
-            # if grade == "yes":
-            #     print("Verdict: Generated answer is useful.")
-            #     return "useful"
-            # else:
-            #     print("Verdict: Generated answer is not useful.")
-            #     return "not useful"
             print("Verdict: No relevant documents found.")
             return "not useful"
 

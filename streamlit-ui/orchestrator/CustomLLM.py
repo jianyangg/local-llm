@@ -2,22 +2,22 @@ from langchain_community.llms import Ollama
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.output_parsers import StrOutputParser
+from app_config import config
 
+# TODO: Add additional variable into graph state to keep feedback on the responses from grader, should there be retries.
+# TODO: Include a chat_history prompt to keep track of the conversation: Chat History: ```{history}```"""
+# TODO: We can store this in the GraphState as well.
 class CustomLLM:
     def __init__(self, tenant_id: str):
         self.json_parser = JsonOutputParser()
-
-        self.json_llm = Ollama(model="llama3", temperature=0, format="json", base_url="http://ollama:11434")
-        # TODO: Add additional variable into graph state to keep feedback on the responses from grader, should there be retries.
-        self.llm = Ollama(model="llama3", temperature=0.2, base_url="http://ollama:11434")
+        self.json_llm = Ollama(model=config["llm_name"], temperature=0, format="json", base_url=config["ollama_base_url"])
+        self.llm = Ollama(model=config["llm_name"], temperature=0, base_url=config["ollama_base_url"])
         self.tenant_id = tenant_id
 
     def initial_router(self, prompt: str):
         """
         LLM evaluates the question to determine if we should look it up in the vectorstore or the web
         based on a predefined set of topics as mentioned in the prompt.
-
-        # TODO: This can be used as the filtering mechanism
         
         Args:
             prompt (str): The user prompt to evaluate
@@ -26,8 +26,6 @@ class CustomLLM:
             str: Either the vectorstore or give up
         """
 
-        # TODO: Include a chat_history prompt to keep track of the conversation: Chat History: ```{history}```"""
-        # TODO: We can store this in the GraphState as well.
         routing_prompt = PromptTemplate(
             # Template for llama3
             template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
@@ -100,58 +98,39 @@ class CustomLLM:
             qn (str): The user question
 
         Returns:
-            # TODO: this might not be str
             str: The generated answer
         """
-        answer_prompt = PromptTemplate(
-            # """
-            # Template for llama3
-            # """
-            template="""<|begin_of_text|>
-                        <|start_header_id|>system<|end_header_id|>
-                        You are Jarvis, an AI assistant designed to answer questions using the provided context.
-                        Your responses must be grounded in the context given. 
+        answerer_prompt = PromptTemplate(
+            template=""""
+                <|begin_of_text|>
+                <|start_header_id|>system<|end_header_id|>
+                You are a highly knowledgeable and structured Retrieval QA model. You are given a query and a set of documents.
+                Your task is to provide a detailed and well-structured answer based on the documents provided.
+                The documents have all been pre-processed and are determined by your overlords to be relevant to the query -- do not second-guess them.
+                Please ensure that your answer is clear, concise, and divided into the following sections:
 
-                        Follow these instructions carefully:
+                1. **Introduction**: Briefly summarize the query and the context.
+                2. **Key Information from Documents**: Highlight the most relevant information from the documents that directly addresses the query.
+                3. **Detailed Answer**: Provide a thorough and detailed answer to the query, integrating information from the documents.
+                4. **Conclusion**: Summarize the key points and provide any additional insights or recommendations if relevant.
 
-                        1. **Analyze the Context:** Thoroughly examine the context to identify relevant information related to the question.
-                        2. **Directly Answer the Question:** Craft your response based on the information found in the context. Prioritize accuracy and relevance.
-                        3. **Cite Your Sources:** Clearly indicate which documents from the context support your answer.
-                        4. **Admit Lack of Knowledge:** If the context does not contain enough information to answer the question definitively, state that you don't have the answer rather than guessing or making assumptions.
-                        5. **Optional: Suggest Further Exploration:** If appropriate, based on the context, you may offer additional insights or suggest where the user could find more information.
+                Remember to keep your answers concise and structured.
+                <|eot_id|><|start_header_id|>user<|end_header_id|>
+                Query: {query}
+                Documents: {documents}
 
-                        Formatting:
-
-                        * Use markdown for clear structure (headings, lists, etc.).
-                        * Denote new lines with \n.
-                        * Maintain a professional and concise tone. 
-
-                        Format:
-                        1. Title
-                        2. Brief Introduction to answer
-                        3. Detailed Answer with supporting evidence
-                        4. Sources, specific file names and pages of the documents used.
-
-                        Important:
-
-                        * Do not include information that is not present in the context.
-                        * Avoid speculation or personal opinions.
-                        * Focus on providing a factual and informative response based on the evidence available.
-
-                        <|eot_id|><|start_header_id|>user<|end_header_id|>
-
-                        Question: {question} 
-                        Context: {context}
-
-                        Answer: <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
-            
-            input_variables=["question", "context"],
+                <|eot_id|><|start_header_id|>assistant<|end_header_id|>
+                """,
+            input_variables=["query", "documents"],
         )
 
-        answer_pipeline = answer_prompt | self.llm | StrOutputParser()
+        answer_pipeline = answerer_prompt | self.llm | StrOutputParser()
+        generated_answer = answer_pipeline.invoke({"query": qn, "documents": context})
+        print("---" * 5)
+        print("Temp answer:")
+        print(generated_answer)
+        print("---" * 5)
 
-        generated_answer = answer_pipeline.invoke({"question": qn, "context": context})
-        print("Answer attempt (not final):", generated_answer)
         return generated_answer
     
 
@@ -164,7 +143,6 @@ class CustomLLM:
             documents (str): The filtered documents
 
         Returns:
-            # TODO: this might not be str
             str: The grade of the answer
         """
         hallucination_prompt = PromptTemplate(
