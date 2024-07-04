@@ -3,27 +3,17 @@ from CustomLLM import CustomLLM
 from langchain_community.vectorstores import Neo4jVector
 from langchain_community.embeddings import OllamaEmbeddings
 from flashrank import Ranker, RerankRequest
-from utils import draw_bbox_for_final_docs
 from langchain.docstore.document import Document as LangchainDocument
+from app_config import config
 
 
 class Decision:
     def __init__(self, tenant_id: str):
-
-        neo4j_config={
-            "ollama_base_url": "http://ollama:11434",
-            "llm_name": "llama3",
-            "neo4j_url": "bolt://neo4j:7687",
-            "neo4j_username": "neo4j",
-            "neo4j_password": "password",
-        }
-
         # load embedding model
         embeddings = OllamaEmbeddings(
-            base_url=neo4j_config["ollama_base_url"],	
-            model=neo4j_config["llm_name"]
+            base_url=config["ollama_base_url"],	
+            model=config["llm_name"]
         )
-
 
         print("Using vector store for tenant id:", tenant_id)
 
@@ -33,9 +23,9 @@ class Decision:
             # reference document_parsing notebook
             self.vectorstore = Neo4jVector.from_existing_index(
                 embeddings,
-                url=neo4j_config["neo4j_url"],
-                username=neo4j_config["neo4j_username"],
-                password=neo4j_config["neo4j_password"],
+                url=config["neo4j_url"],
+                username=config["neo4j_username"],
+                password=config["neo4j_password"],
                 index_name=tenant_id,
                 node_label=tenant_id,
             )
@@ -44,9 +34,9 @@ class Decision:
             print("Index does not exist. Creating index...")
             self.vectorstore = Neo4jVector.from_documents(
                 documents="",
-                url=neo4j_config["neo4j_url"],
-                username=neo4j_config["neo4j_username"],
-                password=neo4j_config["neo4j_password"],
+                url=config["neo4j_url"],
+                username=config["neo4j_username"],
+                password=config["neo4j_password"],
                 embedding=embeddings,
                 index_name=tenant_id,
                 node_label=tenant_id,
@@ -54,8 +44,6 @@ class Decision:
             print(f"Index created for {tenant_id}")
 
         self.retriever = self.vectorstore.as_retriever(search_kwargs={'k': 25, 'fetch_k': 50, 'score_threshold': 0.6})
-        # TODO: TESTING RETRIEVAL
-        print(self.retriever.invoke("Shares repurchase"))
         self.custom_llm = CustomLLM(tenant_id)
         self.ranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="cache")
 
@@ -174,16 +162,25 @@ class Decision:
 
         docs = self.retriever.invoke(question)
         print("Number of preliminary docs retrieved:", len(docs))
-        rerankrequest = RerankRequest(query=question, passages=docs_to_passages(docs))
-        ranked_passages = self.ranker.rerank(rerankrequest)
-        print("Number of reranked docs:", len(ranked_passages))
-        # Exclude scores below 0.8
-        filtered_ranked_passages = [doc for doc in ranked_passages if doc['score'] >= 0.8]
-        # If query isn't specific enough, the score will be very low. In this case, we can use the top 5 docs.
-        filtered_ranked_passages = filtered_ranked_passages if len(filtered_ranked_passages) > 3 else ranked_passages[:10]
-        print("Number of filtered ranked passages:", len(filtered_ranked_passages))
-        final_docs = passages_to_langchainDocument(filtered_ranked_passages)
-        pretty_print_docs(final_docs)
+
+        if len(docs) != 0:
+            # Using reranker
+            rerankrequest = RerankRequest(query=question, passages=docs_to_passages(docs))
+            ranked_passages = self.ranker.rerank(rerankrequest)
+
+            print("Number of reranked docs:", len(ranked_passages))
+            # Exclude scores below 0.8
+            filtered_ranked_passages = [doc for doc in ranked_passages if doc['score'] >= 0.8]
+            # If query isn't specific enough, the score will be very low. In this case, we can use the top 5 docs.
+            filtered_ranked_passages = filtered_ranked_passages if len(filtered_ranked_passages) > 3 else ranked_passages[:10]
+            print("Number of filtered ranked passages:", len(filtered_ranked_passages))
+            final_docs = passages_to_langchainDocument(filtered_ranked_passages)
+
+            print(f"Final: Documents retrieved: {len(final_docs)}")
+            pretty_print_docs(final_docs)
+        else:
+            final_docs = []
+            print("Final: No documents retrieved.")
 
         return {"documents": final_docs, "question": question}
 
@@ -260,9 +257,6 @@ class Decision:
         print("Context:", context)
 
         generated_answer = self.custom_llm.answer_generator(context=context, qn=question)
-
-        # Prepare screenshots
-        draw_bbox_for_final_docs(documents)
 
         # Only the last item is generated in this function
         return {"documents": documents, "question": question, "generation": generated_answer}

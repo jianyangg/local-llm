@@ -2,22 +2,22 @@ from langchain_community.llms import Ollama
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.output_parsers import StrOutputParser
+from app_config import config
 
+# TODO: Add additional variable into graph state to keep feedback on the responses from grader, should there be retries.
+# TODO: Include a chat_history prompt to keep track of the conversation: Chat History: ```{history}```"""
+# TODO: We can store this in the GraphState as well.
 class CustomLLM:
     def __init__(self, tenant_id: str):
         self.json_parser = JsonOutputParser()
-
-        self.json_llm = Ollama(model="llama3", temperature=0, format="json", base_url="http://ollama:11434")
-        # TODO: Add additional variable into graph state to keep feedback on the responses from grader, should there be retries.
-        self.llm = Ollama(model="llama3", temperature=0, base_url="http://ollama:11434")
+        self.json_llm = Ollama(model=config["llm_name"], temperature=0, format="json", base_url=config["ollama_base_url"])
+        self.llm = Ollama(model=config["llm_name"], temperature=0, base_url=config["ollama_base_url"])
         self.tenant_id = tenant_id
 
     def initial_router(self, prompt: str):
         """
         LLM evaluates the question to determine if we should look it up in the vectorstore or the web
         based on a predefined set of topics as mentioned in the prompt.
-
-        # TODO: This can be used as the filtering mechanism
         
         Args:
             prompt (str): The user prompt to evaluate
@@ -26,8 +26,6 @@ class CustomLLM:
             str: Either the vectorstore or give up
         """
 
-        # TODO: Include a chat_history prompt to keep track of the conversation: Chat History: ```{history}```"""
-        # TODO: We can store this in the GraphState as well.
         routing_prompt = PromptTemplate(
             # Template for llama3
             template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
@@ -100,7 +98,6 @@ class CustomLLM:
             qn (str): The user question
 
         Returns:
-            # TODO: this might not be str
             str: The generated answer
         """
         answerer_prompt = PromptTemplate(
@@ -146,7 +143,6 @@ class CustomLLM:
             documents (str): The filtered documents
 
         Returns:
-            # TODO: this might not be str
             str: The grade of the answer
         """
         hallucination_prompt = PromptTemplate(

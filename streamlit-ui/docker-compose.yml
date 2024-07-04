@@ -17,7 +17,7 @@ services:
       context: ./orchestrator
       dockerfile: Dockerfile
     expose:
-      - "5001"
+      - "5010"
     depends_on:
       - ollama
       - neo4j
