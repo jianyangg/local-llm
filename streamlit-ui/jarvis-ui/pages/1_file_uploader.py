@@ -18,11 +18,11 @@ try:
     st.write("Upload a file to the database.")
 
     with open('auth/config.yaml') as file:
-        config = yaml.load(file, Loader=SafeLoader)
+        auth_config = yaml.load(file, Loader=SafeLoader)
 
     username = st.session_state["username"]
     try:
-        hashed_password = config["credentials"]["usernames"][username]["password"]
+        hashed_password = auth_config["credentials"]["usernames"][username]["password"]
     except KeyError as e:
         st.error(f"Error: {e}")
 

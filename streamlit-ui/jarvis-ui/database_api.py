@@ -6,19 +6,12 @@ from langchain_community.vectorstores import Neo4jVector
 from langchain_experimental.text_splitter import SemanticChunker
 from llmsherpa.readers import LayoutPDFReader
 import os
-
-db_config= {"ollama_base_url": "http://ollama:11434",
-        "llm_name": "llama3",
-        "nlm_url": "http://nlm-ingestor:5001/api/parseDocument?renderFormat=all&applyOcr=yes&useNewIndentParser=yes",
-        "neo4j_url": "bolt://neo4j:7687",
-        "neo4j_username": "neo4j",
-        "neo4j_password": "password",
-        }
+from app_config import config
 
 ## Load embeddings
 embeddings = OllamaEmbeddings(
-    base_url=db_config["ollama_base_url"],	
-    model=db_config["llm_name"]
+    base_url=config["ollama_base_url"],	
+    model=config["llm_name"]
 )
 
 # def docParser(file_path, st):
@@ -150,20 +143,19 @@ def is_use_semantic_chunking(leaf_nodes):
     print("Number of paragraphs:", num_paras)
     return count > num_paras/2
 
-def find_leaf_nodes(node):
-    leaf_nodes = []
+def find_leaf_nodes(node, leaf_nodes=[]):
 
     if len(node.children) == 0:
         leaf_nodes.append(node)
     for child in node.children:
-        find_leaf_nodes(child)
+        find_leaf_nodes(child, leaf_nodes)
 
     return leaf_nodes
 
 def docParser(file_path, st):
     layout_root = None
     try:
-        reader = LayoutPDFReader(db_config["nlm_url"])
+        reader = LayoutPDFReader(config["nlm_url"])
         try:
             parsed_doc = reader.read_pdf(file_path)
         except FileNotFoundError:
@@ -180,8 +172,8 @@ def docParser(file_path, st):
 
         ## Load embeddings
         embeddings = OllamaEmbeddings(
-            base_url=db_config["ollama_base_url"],	
-            model=db_config["llm_name"]
+            base_url=config["ollama_base_url"],	
+            model=config["llm_name"]
         )
         ## Chunk documents using semantic chunker
         text_splitter = SemanticChunker(
@@ -205,7 +197,7 @@ def docParser(file_path, st):
     return docs
 
 # Upload files
-def upload_files(uploaded_files, st, tenant_id, username=db_config["neo4j_username"], password=db_config["neo4j_password"]):
+def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"], password=config["neo4j_password"]):
     
     combined_doc_splits = []
     for uploaded_file in uploaded_files:
@@ -227,7 +219,7 @@ def upload_files(uploaded_files, st, tenant_id, username=db_config["neo4j_userna
         Neo4jVector.from_documents(
             documents=combined_doc_splits,
             embedding=embeddings,
-            url=db_config["neo4j_url"],
+            url=config["neo4j_url"],
             username=username,
             password=password,
             index_name=tenant_id,
