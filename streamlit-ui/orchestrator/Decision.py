@@ -17,7 +17,7 @@ class Decision:
 
         print("Using vector store for tenant id:", tenant_id)
 
-        # TOOD: Bad practice to use exceptions as part of logic.
+        # TODO: Bad practice to use exceptions as part of logic.
         try: 
             print("Trying to fetch from existing index...")
             # reference document_parsing notebook
@@ -69,7 +69,8 @@ class Decision:
         """
         print("Deciding route...")
         user_prompt = state["question"]
-        decision = self.custom_llm.initial_router(user_prompt)
+        chat_history = state["chat_history"]
+        decision = self.custom_llm.initial_router(user_prompt, chat_history)
         print("DECISON:", decision)
 
         if decision["datasource"] == "generate":
@@ -200,15 +201,19 @@ class Decision:
         print("Grading documents...")
         question = state["question"]
         documents = state["documents"]
+        chat_history = state["chat_history"]
 
         # Score each doc
         filtered_docs = []
         relevant_docs = 0
         for d in documents:
             score = self.custom_llm.retrieval_grader(
-                question, d.page_content
+                question,
+                d.page_content,
+                chat_history
             )
             ## recall that the score variable holds a json {"score": "yes"}
+            print("Score:", score)
             grade = score["score"]
             # Document relevant
             if grade.lower() == "yes":
@@ -227,7 +232,7 @@ class Decision:
             give_up = "no"
 
         # give_up status
-        return {"documents": filtered_docs, "question": question, "give_up": give_up}
+        return {"documents": filtered_docs, "question": question, "give_up": give_up, "chat_history": chat_history}
 
 
     def generate_answer(self, state):
@@ -243,6 +248,7 @@ class Decision:
         print("Generating answer...")
         question = state["question"]
         documents = state["documents"]
+        chat_history = state["chat_history"]
 
         # limit due to limited context length of llm
         limit = 7500
@@ -256,10 +262,10 @@ class Decision:
         
         print("Context:", context)
 
-        generated_answer = self.custom_llm.answer_generator(context=context, qn=question)
+        generated_answer = self.custom_llm.answer_generator(context=context, qn=question, chat_history=chat_history)
 
         # Only the last item is generated in this function
-        return {"documents": documents, "question": question, "generation": generated_answer}
+        return {"documents": documents, "question": question, "generation": generated_answer, "chat_history": chat_history}
 
     def decide_to_generate(self, state):
         """
@@ -301,6 +307,12 @@ class Decision:
         question = state["question"]
         documents = state["documents"]
         generation = state["generation"]
+        chat_history = state["chat_history"]
+        limit = 7500
+
+        # process documents stored in the compressed_docs
+        docs_content = [doc.page_content for doc in documents]
+        context = "\n\n---\n\n".join(docs_content)
 
         # no relevant documents found.
         if not documents:
@@ -308,9 +320,12 @@ class Decision:
             return "not useful"
 
         score = self.custom_llm.hallucination_grader(
-            generated_answer=generation, documents=documents
+            generated_answer=generation,
+            documents=context[:limit],
         )
 
+        print("SCORE", score)
+        print()
         # TODO: Consider passing the grade as a boolean instead of a string.
         grade = score["score"]
 
@@ -319,7 +334,7 @@ class Decision:
             print("Verdict: Generated answer is grounded in documents.")
             # Check question-answering
             print("Checking if generation answers the question...")
-            score = self.custom_llm.answer_grader(generated_answer=generation, qn=question)
+            score = self.custom_llm.answer_grader(generated_answer=generation, qn=question, chat_history=chat_history)
             grade = score["score"]
             if grade == "yes":
                 print("Verdict: Generated answer is useful.")
@@ -347,5 +362,23 @@ class Decision:
 
         print("Generating answer without RAG...")
         question = state["question"]
-        generated_answer = self.custom_llm.llm_only(qn=question)
+        chat_history = state["chat_history"]
+        generated_answer = self.custom_llm.llm_only(qn=question, chat_history=chat_history)
         return {"generation": generated_answer}
+    
+
+    def rephrase_question(self, state):
+        """
+        Rephrase the question in relation to the chat_history to improve the quality of the answer.
+
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            str: The rephrased question
+        """
+        print("Rephrasing question to include context...")
+        question = state["question"]
+        chat_history = state["chat_history"]
+        rephrased_question = self.custom_llm.rephraser(question, chat_history)
+        return {"question": rephrased_question, "chat_history": chat_history}

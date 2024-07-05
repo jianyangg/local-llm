@@ -181,6 +181,7 @@ def home(username, name):
             # Display assistant response in chat message container
             st.markdown(f'<div class="assistant-message"><strong>Jarvis ✧₊⁺</strong><p>{response}</p></div>', unsafe_allow_html=True)
         
+        # Only for certain chat modes that return documents
         if docs_metadata is not None:
             with st.sidebar:
                 with st.spinner("_Processing source documents..._"):
@@ -188,12 +189,18 @@ def home(username, name):
                     # each sub-document is a dictionary with keys: page_content, file_path, page_idx, level, bbox
                     dict_of_docs = {doc["file_path"].split("/")[-1]: [] for doc in docs_metadata}
                     for doc in docs_metadata:
-                        image_path, caption, page_idx = draw_bounding_box_on_pdf_image(doc), doc["file_path"].split("/")[-1], doc["page_idx"]
-                        dict_of_docs[doc["file_path"].split("/")[-1]].append({"image_path": image_path, "caption": caption, "page_idx": page_idx})
+                        try:
+                            image_path, caption, page_idx = draw_bounding_box_on_pdf_image(doc), doc["file_path"].split("/")[-1], doc["page_idx"]
+                            dict_of_docs[doc["file_path"].split("/")[-1]].append({"image_path": image_path, "caption": caption, "page_idx": page_idx})
+                        except Exception as e:
+                            # TODO: Bad code, using exception as part of the logic
+                            continue
 
-                st.subheader(f"**Sources referenced ({len(dict_of_docs)})**")
+                st.subheader(f"**Sources referenced ({len(dict_of_docs)} PDFs)**")
                 idx = 1
                 for doc in dict_of_docs:
+                    if dict_of_docs[doc] == []:
+                        continue
                     sub_docs = dict_of_docs[doc]
                     st.write(f"**{str(idx)}. {doc}**")
                     for sub_doc in sub_docs:

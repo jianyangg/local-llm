@@ -41,9 +41,7 @@ def draw_bounding_box_on_pdf_image(doc, dpi=200):
     draw.rectangle(scaled_coordinates, outline="red", width=2)
 
     # Image file name
-    # take the pdf_path and add page_number
-    # image_path = pdf_path.replace(".pdf", f"_page_{page_number}_{coordinates[1]}.png")
-    image_path = f"output/{pdf_path.split("/")[-1].replace(".pdf", f"_page_{page_number}_{coordinates[1]}.png")}"
+    image_path = f"output/{pdf_path.split('/')[-1].replace('.pdf', f'_page_{page_number}_{coordinates[1]}.png')}"
     
     # Save the image with the bounding box
     img.save(image_path)

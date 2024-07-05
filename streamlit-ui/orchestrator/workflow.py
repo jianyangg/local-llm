@@ -25,9 +25,12 @@ def buildChatApp(tenant_id, chat_mode):
     # ## TODO: This is a temporary implementation for direct RAG.
     if chat_mode == "Semantic Search w/o Agents":
         print("Building Semantic Search w/o Agents")
+        # Based off chat history, rephrase question to include more context
+        workflow.add_node("rephrase_question", decision.rephrase_question)
+        workflow.set_entry_point("rephrase_question")
+        workflow.add_edge("rephrase_question", "retrieve_documents")
         workflow.add_node("retrieve_documents", decision.retrieve_documents)  # retrieve documents
         workflow.add_node("generate", decision.generate_answer)  # generate
-        workflow.set_entry_point("retrieve_documents")
         workflow.add_edge("retrieve_documents", "generate")
         workflow.add_edge("generate", END)
 
@@ -38,9 +41,13 @@ def buildChatApp(tenant_id, chat_mode):
         workflow.add_node("retrieve_documents", decision.retrieve_documents)  # retrieve documents
         workflow.add_node("grade_documents", decision.grade_documents)  # grade documents
         workflow.add_node("generate", decision.generate_answer)  # generate
+        workflow.add_node("rephrase_question", decision.rephrase_question)
         workflow.add_node("llm", decision.generate_llm_only)  # generate
 
-        workflow.set_entry_point("retrieve_documents")
+        # Based off chat history, rephrase question to include more context
+        workflow.set_entry_point("rephrase_question")
+        workflow.add_edge("rephrase_question", "retrieve_documents")
+
         workflow.add_edge("retrieve_documents", "grade_documents")
 
         workflow.add_conditional_edges(
@@ -66,11 +73,11 @@ def buildChatApp(tenant_id, chat_mode):
             # and then checks if the generation is useful to answer the question
             decision.grade_generation_wrt_documents_and_question,
             {   
-                # not supported by documents
+                # not supported by documents, regenerate
                 "not supported": "generate",
                 # useful if no hallucinations and answers the question
                 "useful": END,
-                # not useful in answering the question
+                # not useful in answering the question, generate without docs
                 "not useful": "llm",
             },
         )
@@ -100,6 +107,10 @@ def buildChatApp(tenant_id, chat_mode):
                 "vectorstore": "retrieve_documents",
             },
         )
+
+        # Based off chat history, rephrase question to include more context
+        workflow.add_node("rephrase_question", decision.rephrase_question)
+        workflow.add_edge("rephrase_question", "retrieve_documents")
 
 
         ## 2a. Retrieve Documents

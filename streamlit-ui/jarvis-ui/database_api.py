@@ -228,8 +228,8 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
         print("Documents written to database")
         return True
     except Exception as e:
-        
-        st.error(e)
+        st.error(e.message)
+        st.error(e.args)
         return False
 
 
