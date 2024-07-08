@@ -12,7 +12,7 @@ def generate_hasher(unique_id):
 def generate_tenant_id(username, password):
     return generate_hasher(username + password)
 
-def draw_bounding_box_on_pdf_image(doc, dpi=200):
+def draw_bounding_box_on_pdf_image(doc, dpi=200, colour="red", location="output/"):
     pdf_path = doc["file_path"]
     page_number = doc["page_idx"]
     coordinates = doc["bbox"]
@@ -38,10 +38,10 @@ def draw_bounding_box_on_pdf_image(doc, dpi=200):
     
     # Draw the bounding box on the image
     draw = ImageDraw.Draw(img)
-    draw.rectangle(scaled_coordinates, outline="red", width=2)
+    draw.rectangle(scaled_coordinates, outline=colour, width=2)
 
     # Image file name
-    image_path = f"output/{pdf_path.split('/')[-1].replace('.pdf', f'_page_{page_number}_{coordinates[1]}.png')}"
+    image_path = f"{location}{pdf_path.split('/')[-1].replace('.pdf', f'_page_{page_number}_{coordinates[1]}.png')}"
     
     # Save the image with the bounding box
     img.save(image_path)

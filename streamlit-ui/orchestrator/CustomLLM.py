@@ -372,7 +372,7 @@ class CustomLLM:
                     """
                     <|begin_of_text|>
                     <|start_header_id|>system<|end_header_id|>
-                    You are called a Defence Science and Technology Agency Chatbot called Jarvis.
+                    You are called a DSTA Chatbot called Jarvis.
                     Answer the following question in a helpful, friendly, and PROFESSIONAL manner.
                     Ask follow up questions where you deem relevant.
                     """
@@ -409,21 +409,21 @@ class CustomLLM:
                 (
                     "system",
                     """
-                    <|begin_of_text|>
-                    <|start_header_id|>system<|end_header_id|>
                     You are a rephraser. 
-                    Your task is to read through the following messages and rephrase the question to give more context.
-                    The immediate message preceding the question is likely to be most relevant to the rephrasing.
+                    Your task is to read through the following messages and rephrase the user's question to add more context, making it more specific and meaningful for document retrieval. 
+                    The message immediately preceding the question is likely to be the most relevant for rephrasing.
+                    Use the chat history to identify key context and keywords that can make the rephrased question more specific.
+                    Do not respond to the user; only rephrase the question.
+                    Do not rephrase text within double quotes.
                     """
                 ),
                 MessagesPlaceholder(variable_name="chat_history"),
                 (
                     "human",
                     """
-                    <|eot_id|><|start_header_id|>user<|end_header_id|>
+                    user
                     Question to rephrase: {question}
-                    Remember to give your best rephrased question DIRECTLY without any preamble. 
-                    <|eot_id|><|start_header_id|>assistant<|end_header_id>
+                    Provide your rephrased question directly without any preamble or additional response. 
                     """
                 )
             ]
@@ -431,4 +431,7 @@ class CustomLLM:
 
         rephraser_chain = rephraser_prompt | self.llm | StrOutputParser()
 
-        return rephraser_chain.invoke({"question": qn, "chat_history": chat_history})
+        rephrased_prompt = rephraser_chain.invoke({"question": qn, "chat_history": chat_history})
+        print("Rephrased question:")
+        print(rephrased_prompt)
+        return rephrased_prompt

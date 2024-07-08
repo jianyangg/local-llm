@@ -10,7 +10,7 @@ if USE_DOCKER:
             # This password is not the default password. Log in once and set the password to "password". Could be improved.
             "neo4j_password": "password",
             "orchestrator_url_entry": "http://orchestrator:5010/entry",
-            "orchestrator_url_images": "http://orchestrator:5010/images",
+            "orchestrator_url_title": "http://orchestrator:5010/title",
             }
 else:
     config = {"ollama_base_url": "http://localhost:11434",
@@ -21,5 +21,5 @@ else:
             # This password is not the default password. Log in once and set the password to "password". Could be improved.
             "neo4j_password": "password",
             "orchestrator_url_entry": "http://localhost:5010/entry",
-            "orchestrator_url_images": "http://localhost:5010/images",
+            "orchestrator_url_title": "http://localhost:5010/title",
             }

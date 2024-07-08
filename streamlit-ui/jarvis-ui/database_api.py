@@ -7,6 +7,7 @@ from langchain_experimental.text_splitter import SemanticChunker
 from llmsherpa.readers import LayoutPDFReader
 import os
 from app_config import config
+from utils import draw_bounding_box_on_pdf_image
 
 ## Load embeddings
 embeddings = OllamaEmbeddings(
@@ -193,6 +194,11 @@ def docParser(file_path, st):
             
         # Convert to Langchain documents
         docs = [LangchainDocument(page_content=collated_pg_content[i], metadata={key: leaf_nodes[i].block_json[key] for key in ('bbox', 'page_idx', 'level')} | {"file_path": file_path}) for i in range(len(collated_pg_content))]
+        
+        # Visualise chunking
+        for doc in docs:
+            draw_bounding_box_on_pdf_image(doc.metadata, colour="green", location="chunks/")
+
 
     return docs
 
@@ -224,6 +230,8 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
             password=password,
             index_name=tenant_id,
             node_label=tenant_id,
+            # keyword_index_name="keyword",
+            # search_type="hybrid"
         )
         print("Documents written to database")
         return True

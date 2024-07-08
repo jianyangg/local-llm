@@ -104,7 +104,7 @@ def buildChatApp(tenant_id, chat_mode):
             # Format: <output_from_intialRoutingFn: node_name>
             {
                 "generate": "llm",
-                "vectorstore": "retrieve_documents",
+                "vectorstore": "rephrase_question",
             },
         )
 

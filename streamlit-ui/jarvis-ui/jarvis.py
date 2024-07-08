@@ -7,6 +7,8 @@ from yaml.loader import SafeLoader
 from utils import generate_tenant_id, delete_screenshots, draw_bounding_box_on_pdf_image
 from app_config import config
 from pprint import pprint
+import shutil
+import os
 
 st.set_page_config(page_title="Jarvis", page_icon="🤖")
 
@@ -71,7 +73,7 @@ authenticator = stauth.Authenticate(
 )
 
 # access the response from the orchestrator endpoint
-def response_generator(prompt, tenant_id, chat_mode) -> json:
+def response_generator(prompt, tenant_id, chat_mode, generate_title=False) -> json:
     print("Querying orchestrator...")
     url = config["orchestrator_url_entry"]
     # allow correct interpretation of data
@@ -81,17 +83,23 @@ def response_generator(prompt, tenant_id, chat_mode) -> json:
     data = {
         "prompt": prompt,
         "tenant_id": tenant_id,
-        "chat_mode": chat_mode
+        "chat_mode": chat_mode,
+        "generate_title": generate_title
     }
 
     response = requests.post(url, headers=headers, data=json.dumps(data))
     response_str = response.content.decode('utf-8')
     response_json = json.loads(response_str)
     print("Received response from orchestrator.")
-    if "documents" in response_json:
-        return response_json['response'], response_json['documents']
-    else:
-        return response_json['response'], None
+
+    print(response_json)
+
+    # Return response and documents if available
+    response = response_json.get('response')
+    documents = response_json.get('documents')
+    title = response_json.get('title')
+
+    return response, documents, title
 
 def fetch_image_paths():
     url = config["orchestrator_url_images"]
@@ -133,12 +141,17 @@ def auth(selection):
         st.error('Please select an option')
 
 def home(username, name):
+    # Generate tenant_id based off username and password combination
+    user_hashed_password = auth_config['credentials']['usernames'][username]['password']
+    tenant_id = generate_tenant_id(username, user_hashed_password)
+    past_convos = get_past_convos(tenant_id)
+    print("Past convos:", past_convos)
+
     # Add chat mode selection to the sidebar
     with st.sidebar:
-        st.subheader("Chat Modes")
-        chat_mode = st.radio("Select an option", options=(":rainbow[**Jarvis**]", "**Semantic Search w Agents**", "**Semantic Search w/o Agents**", "**Chatbot**"), captions=("Does all", "Facts w agents", "Just the facts, no agents", "Just chat")) 
-    
-    formatted_chat_mode = chat_mode.split("**")[1]
+        chat_mode = st.selectbox("Select a chat mode", options=("Jarvis", "Semantic Search w Agents", "Semantic Search w/o Agents", "Chatbot"), index=2)
+        convo_title = st.selectbox("Select a conversation", options=past_convos, index=0)
+
     authenticator.logout('Logout', 'main')
 
     st.write(f'Welcome *{name}*')
@@ -149,9 +162,13 @@ def home(username, name):
     if "users_messages" not in st.session_state:
         st.session_state.users_messages = {}
 
-    # If the current user is not in the dictionary, add them
-    if username not in st.session_state.users_messages:
+    if convo_title == "New chat":
         st.session_state.users_messages[username] = []
+    else:
+        # means user selected a past conversation
+        # load based off that conversation
+        # Assume convo name is unique (we will make it to be in upload_convo)
+        st.session_state.users_messages[username] = load_convo(tenant_id, convo_title)
 
     # Display chat messages from history on app rerun
     for message in st.session_state.users_messages[username]:
@@ -161,7 +178,7 @@ def home(username, name):
             st.markdown(f'<div class="assistant-message"><strong>Jarvis ✧₊⁺</strong><p>{message["content"]}</p></div>', unsafe_allow_html=True)
 
     # Accept user input
-    if prompt := st.chat_input(placeholder=f"Message Jarvis (mode: {formatted_chat_mode})", key="chat_input"):
+    if prompt := st.chat_input(placeholder=f"Message Jarvis (mode: {chat_mode})", key="chat_input"):
         print("Deleting screenshots")
         # clear png files
         delete_screenshots()
@@ -172,11 +189,12 @@ def home(username, name):
         # Display user message in chat message container
         st.markdown(f'<div class="user-message"><strong>You</strong><p>{prompt}</p></div>', unsafe_allow_html=True)
 
-        with st.spinner("_Kicking into action..._"):            
-            # Generate tenant_id based off username and password combination
-            user_hashed_password = auth_config['credentials']['usernames'][username]['password']
-            tenant_id = generate_tenant_id(username, user_hashed_password)
-            response, docs_metadata = response_generator(prompt=prompt, tenant_id=tenant_id, chat_mode=formatted_chat_mode)
+        with st.spinner("_Kicking into action..._"):       
+            if convo_title == "New chat":
+                # If new chat, generate convo title based off first response
+                response, docs_metadata, convo_title = response_generator(prompt=prompt, tenant_id=tenant_id, chat_mode=chat_mode, generate_title=True)
+            else:
+                response, docs_metadata, _ = response_generator(prompt=prompt, tenant_id=tenant_id, chat_mode=chat_mode, generate_title=False)
             response = "\n\n" + response.strip()
             # Display assistant response in chat message container
             st.markdown(f'<div class="assistant-message"><strong>Jarvis ✧₊⁺</strong><p>{response}</p></div>', unsafe_allow_html=True)
@@ -210,6 +228,54 @@ def home(username, name):
         # Add assistant response to chat history
         st.session_state.users_messages[username].append({"role": "assistant", "content": response})
 
+        # Update the chat history in the json file
+        update_convo(tenant_id, st.session_state.users_messages[username], convo_title)
+
+def get_past_convos(tenant_id):
+    # returns a list of convo topics
+    # Convo is short for conversation
+    default = ["New chat"]
+    # This function reads the json file for chat history
+    convo_path = f"chat_history/{tenant_id}"
+    if not os.path.exists(convo_path):
+        # create dir
+        os.makedirs(convo_path)
+        return default
+    
+    files = os.listdir(convo_path)
+    if files is not None:
+        default.extend(file.split(".")[0] for file in files)
+
+    return default
+
+def load_convo(tenant_id, convo_title):
+    # go to file and parse json convo history as list of dictionaries
+    # assumes the file already exists
+    convo_path = f"chat_history/{tenant_id}/{convo_title}.json"
+    try:
+        with open(convo_path) as file:
+            convo = json.load(file)
+            print("Loaded conversation:")	
+            print(convo)
+            print()
+            return convo
+
+    except Exception as e:
+        st.error(f"Error loading conversation: {e}")
+        return []
+    
+def update_convo(tenant_id, convo, convo_title):
+    # if convo_title is new, create new json file
+    # write convo to json file
+    if '"' in convo_title:
+        convo_title = convo_title.replace('"', "")
+    convo_path = f'chat_history/{tenant_id}/{convo_title}.json'
+    directory = os.path.dirname(convo_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    with open(convo_path, "w") as file:
+        json.dump(convo, file)
+        
 if not st.session_state['authentication_status']:
     tab1, tab2 = st.tabs(["Login", "Register"])
     with tab1:

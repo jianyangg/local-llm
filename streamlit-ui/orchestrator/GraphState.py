@@ -17,6 +17,8 @@ class GraphState(TypedDict):
     give_up: str
     documents: List[str]
     chat_history: list
+    retry_count = 0
+    feedback = List[str]
 
     # initialise documents as empty list
     documents = []
