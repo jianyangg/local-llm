@@ -5,7 +5,7 @@ from langchain_community.embeddings import OllamaEmbeddings
 from flashrank import Ranker, RerankRequest
 from langchain.docstore.document import Document as LangchainDocument
 from app_config import config
-
+from termcolor import cprint
 
 class Decision:
     def __init__(self, tenant_id: str):
@@ -75,7 +75,6 @@ class Decision:
         user_prompt = state["question"]
         chat_history = state["chat_history"]
         decision = self.custom_llm.initial_router(user_prompt, chat_history)
-        print("DECISON:", decision)
 
         if decision["datasource"] == "generate":
             print("Route decided: Generate answer without RAG.")
@@ -123,20 +122,6 @@ class Decision:
         # get the question from the state which is a child of GraphState
         question = state["question"]
 
-        # Retrieval
-        # # use our vector db to fetch documents relevant to our question
-        # documents = self.retriever.invoke(question, top_k=10)
-
-        # # for each document, calculate the score for similarity to the question
-        # docs_with_score = self.vectorstore.similarity_search_with_score(question, k=10)
-        # for doc, score in docs_with_score:
-        #     print("-" * 80)
-        #     print("Score: ", score)
-        #     print(doc.page_content)
-        #     print("-" * 80)
-
-        # final_docs = [doc for doc, _ in docs_with_score]
-
         def docs_to_passages(docs):
             idx = 0
             passages = []
@@ -155,15 +140,15 @@ class Decision:
                 docs.append(LangchainDocument(page_content=passage['text'], metadata=passage['meta']))
             return docs
         
-        def pretty_print_docs(docs):
-            print(
-                f"\n{'-' * 100}\n".join(
-                    [
-                        f"Document {i+1}:\n\n{d.page_content}\nMetadata: {d.metadata}"
-                        for i, d in enumerate(docs)
-                    ]
-                )
-            )
+        # def pretty_print_docs(docs):
+        #     print(
+        #         f"\n{'-' * 100}\n".join(
+        #             [
+        #                 f"Document {i+1}:\n\n{d.page_content}\nMetadata: {d.metadata}"
+        #                 for i, d in enumerate(docs)
+        #             ]
+        #         )
+        #     )
 
         docs = self.retriever.invoke(question)
         print("Number of preliminary docs retrieved:", len(docs))
@@ -173,16 +158,16 @@ class Decision:
             rerankrequest = RerankRequest(query=question, passages=docs_to_passages(docs))
             ranked_passages = self.ranker.rerank(rerankrequest)
 
-            print("Number of reranked docs:", len(ranked_passages))
+            print("No. of reranked docs:", len(ranked_passages))
             # Exclude scores below 0.8
             filtered_ranked_passages = [doc for doc in ranked_passages if doc['score'] >= 0.8]
             # If query isn't specific enough, the score will be very low. In this case, we can use the top 5 docs.
             filtered_ranked_passages = filtered_ranked_passages if len(filtered_ranked_passages) > 3 else ranked_passages[:10]
-            print("Number of filtered ranked passages:", len(filtered_ranked_passages))
+            print("No. of filtered ranked passages:", len(filtered_ranked_passages))
             final_docs = passages_to_langchainDocument(filtered_ranked_passages)
 
-            print(f"Final: Documents retrieved: {len(final_docs)}")
-            pretty_print_docs(final_docs)
+            print(f"No. of final documents retrieved: {len(final_docs)}")
+            # pretty_print_docs(final_docs)
         else:
             final_docs = []
             print("Final: No documents retrieved.")
@@ -263,10 +248,12 @@ class Decision:
 
         # remove all text past limit
         context = context[:limit]
-        
-        print("Context:", context)
 
         generated_answer = self.custom_llm.answer_generator(context=context, qn=question, chat_history=chat_history)
+
+        cprint(f"Chat History: {chat_history}", "yellow")
+        cprint(f"Question: {question}", "yellow")
+        cprint(f"Answer: {generated_answer}", "yellow")
 
         # Only the last item is generated in this function
         return {"documents": documents, "question": question, "generation": generated_answer, "chat_history": chat_history}
@@ -368,6 +355,9 @@ class Decision:
         question = state["question"]
         chat_history = state["chat_history"]
         generated_answer = self.custom_llm.llm_only(qn=question, chat_history=chat_history)
+        cprint(f"Chat History: {chat_history}", "yellow")
+        cprint(f"Question: {question}", "yellow")
+        cprint(f"Answer: {generated_answer}", "yellow")
         return {"generation": generated_answer}
     
 

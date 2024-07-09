@@ -6,9 +6,8 @@ import yaml
 from yaml.loader import SafeLoader
 from utils import generate_tenant_id, delete_screenshots, draw_bounding_box_on_pdf_image
 from app_config import config
-from pprint import pprint
-import shutil
 import os
+from termcolor import cprint
 
 st.set_page_config(page_title="Jarvis", page_icon="🤖")
 
@@ -73,7 +72,7 @@ authenticator = stauth.Authenticate(
 )
 
 # access the response from the orchestrator endpoint
-def response_generator(prompt, tenant_id, chat_mode, generate_title=False) -> json:
+def response_generator(prompt, tenant_id, chat_mode, generate_title=False, convo_hist=[]) -> json:
     print("Querying orchestrator...")
     url = config["orchestrator_url_entry"]
     # allow correct interpretation of data
@@ -84,20 +83,23 @@ def response_generator(prompt, tenant_id, chat_mode, generate_title=False) -> js
         "prompt": prompt,
         "tenant_id": tenant_id,
         "chat_mode": chat_mode,
-        "generate_title": generate_title
+        "generate_title": generate_title,
+        "convo_hist": convo_hist
     }
 
     response = requests.post(url, headers=headers, data=json.dumps(data))
     response_str = response.content.decode('utf-8')
     response_json = json.loads(response_str)
-    print("Received response from orchestrator.")
-
-    print(response_json)
+    cprint("Received response from orchestrator.", "green")
 
     # Return response and documents if available
     response = response_json.get('response')
     documents = response_json.get('documents')
     title = response_json.get('title')
+    # remove aprostrophes
+    if title:
+        title = title.replace("'", "")
+        title = title.replace('"', "")
 
     return response, documents, title
 
@@ -145,12 +147,6 @@ def home(username, name):
     user_hashed_password = auth_config['credentials']['usernames'][username]['password']
     tenant_id = generate_tenant_id(username, user_hashed_password)
     past_convos = get_past_convos(tenant_id)
-    print("Past convos:", past_convos)
-
-    # Add chat mode selection to the sidebar
-    with st.sidebar:
-        chat_mode = st.selectbox("Select a chat mode", options=("Jarvis", "Semantic Search w Agents", "Semantic Search w/o Agents", "Chatbot"), index=2)
-        convo_title = st.selectbox("Select a conversation", options=past_convos, index=0)
 
     authenticator.logout('Logout', 'main')
 
@@ -162,13 +158,46 @@ def home(username, name):
     if "users_messages" not in st.session_state:
         st.session_state.users_messages = {}
 
-    if convo_title == "New chat":
+    # Initialise previous convo title
+    if "prev_convo_title" not in st.session_state:
+        st.session_state.prev_convo_title = {}
+
+    # Initialise conversation history if needed
+    if username not in st.session_state.users_messages:
         st.session_state.users_messages[username] = []
+
+    # Initiliase previous convo title
+    if username not in st.session_state.prev_convo_title:
+        st.session_state.prev_convo_title[username] = "Start"
+
+    prev_convo_title = st.session_state.prev_convo_title[username]
+
+    # Add chat mode selection to the sidebar
+    with st.sidebar:
+        chat_mode = st.selectbox("Select a chat mode", options=("Jarvis", "Semantic Search w Agents", "Semantic Search w/o Agents", "Chatbot"), index=2)
+        convo_title = st.selectbox("Select a conversation", options=past_convos, index=0 if prev_convo_title == "Start" else past_convos.index(prev_convo_title))
+
+    cprint(f"Previous convo title: {prev_convo_title}", "light_cyan")
+    cprint(f"Current convo title: {convo_title}", "light_cyan")
+
+    # default value
+    generate_title = False
+    if prev_convo_title != convo_title:
+        # chat changed
+        # If change to New chat, reset chat history
+        if convo_title == "New chat":
+            st.session_state.users_messages[username] = []
+            generate_title = True
+        # If change to another chat name, load chat history
+        else:
+            st.session_state.users_messages[username] = load_convo(tenant_id, convo_title)
     else:
-        # means user selected a past conversation
-        # load based off that conversation
-        # Assume convo name is unique (we will make it to be in upload_convo)
-        st.session_state.users_messages[username] = load_convo(tenant_id, convo_title)
+        # same chat
+        # it could still be on the new chat or a different chat
+        # but for both, we are still using the same chat history
+        # which is still st.session_state.users_messages[username]
+        # do nothing
+        pass
 
     # Display chat messages from history on app rerun
     for message in st.session_state.users_messages[username]:
@@ -179,26 +208,33 @@ def home(username, name):
 
     # Accept user input
     if prompt := st.chat_input(placeholder=f"Message Jarvis (mode: {chat_mode})", key="chat_input"):
-        print("Deleting screenshots")
+        cprint("Clearing screenshots from previous session", "light_blue")
         # clear png files
-        delete_screenshots()
+        delete_screenshots(tenant_id)
 
-        # Add user message to chat history
-        st.session_state.users_messages[username].append({"role": "user", "content": prompt})
+        cprint("User message added to conversation history", "light_blue")
 
         # Display user message in chat message container
         st.markdown(f'<div class="user-message"><strong>You</strong><p>{prompt}</p></div>', unsafe_allow_html=True)
 
-        with st.spinner("_Kicking into action..._"):       
-            if convo_title == "New chat":
-                # If new chat, generate convo title based off first response
-                response, docs_metadata, convo_title = response_generator(prompt=prompt, tenant_id=tenant_id, chat_mode=chat_mode, generate_title=True)
+        with st.spinner("_Kicking into action..._"):
+            response, docs_metadata, new_convo_title = response_generator(prompt=prompt, tenant_id=tenant_id, chat_mode=chat_mode, generate_title=generate_title, convo_hist=st.session_state.users_messages[username])
+            # update convo title
+            if generate_title:
+                convo_title = new_convo_title
+                cprint(f"Generated new convo title {convo_title}", "green")
             else:
-                response, docs_metadata, _ = response_generator(prompt=prompt, tenant_id=tenant_id, chat_mode=chat_mode, generate_title=False)
+                cprint(f"Using convo title {convo_title}", "green")
+            
+            # Update previous convo title
+            prev_convo_title = convo_title
+            # update session state
+            st.session_state.prev_convo_title[username] = prev_convo_title
+
             response = "\n\n" + response.strip()
             # Display assistant response in chat message container
             st.markdown(f'<div class="assistant-message"><strong>Jarvis ✧₊⁺</strong><p>{response}</p></div>', unsafe_allow_html=True)
-        
+
         # Only for certain chat modes that return documents
         if docs_metadata is not None:
             with st.sidebar:
@@ -208,10 +244,11 @@ def home(username, name):
                     dict_of_docs = {doc["file_path"].split("/")[-1]: [] for doc in docs_metadata}
                     for doc in docs_metadata:
                         try:
-                            image_path, caption, page_idx = draw_bounding_box_on_pdf_image(doc), doc["file_path"].split("/")[-1], doc["page_idx"]
+                            image_path, caption, page_idx = draw_bounding_box_on_pdf_image(doc, location=f"output/{tenant_id}"), doc["file_path"].split("/")[-1], doc["page_idx"]
                             dict_of_docs[doc["file_path"].split("/")[-1]].append({"image_path": image_path, "caption": caption, "page_idx": page_idx})
                         except Exception as e:
                             # TODO: Bad code, using exception as part of the logic
+                            print(e)
                             continue
 
                 st.subheader(f"**Sources referenced ({len(dict_of_docs)} PDFs)**")
@@ -225,11 +262,23 @@ def home(username, name):
                         st.image(sub_doc["image_path"], caption=f"{sub_doc['caption']}, page {sub_doc['page_idx']}", use_column_width="auto")
                     idx += 1
 
+        # Add user message to chat history
+        st.session_state.users_messages[username].append({"role": "user", "content": prompt})
         # Add assistant response to chat history
         st.session_state.users_messages[username].append({"role": "assistant", "content": response})
 
         # Update the chat history in the json file
+        cprint(f"Saving conversation history with title {convo_title}", "light_blue")
+        if convo_title == "New chat":
+            cprint("WRONG! It should not be New chat", "red")
         update_convo(tenant_id, st.session_state.users_messages[username], convo_title)
+        cprint(f"Conversation History is {st.session_state.users_messages[username]}", "light_blue")
+        cprint("Conversation history saved.", "light_blue")
+
+        cprint(f"Previous convo title: {prev_convo_title}", "light_cyan")
+        cprint(f"Current convo title: {convo_title}", "light_cyan")
+
+
 
 def get_past_convos(tenant_id):
     # returns a list of convo topics

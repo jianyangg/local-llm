@@ -40,16 +40,22 @@ def draw_bounding_box_on_pdf_image(doc, dpi=200, colour="red", location="output/
     draw = ImageDraw.Draw(img)
     draw.rectangle(scaled_coordinates, outline=colour, width=2)
 
+    # Create dir if it doesn't exist
+    if not os.path.exists(location):
+        os.makedirs(location)
+
     # Image file name
-    image_path = f"{location}{pdf_path.split('/')[-1].replace('.pdf', f'_page_{page_number}_{coordinates[1]}.png')}"
+    image_path = f"{location}/{pdf_path.split('/')[-1].replace('.pdf', f'_page_{page_number}_{coordinates[1]}.png')}"
     
     # Save the image with the bounding box
     img.save(image_path)
 
     return image_path
 
-def delete_screenshots():
+def delete_screenshots(tenant_id):
+    if not os.path.exists(f"output/{tenant_id}"):
+        return
     # delete all the png files in output dir
-    for file in os.listdir("output/"):
+    for file in os.listdir(f"output/{tenant_id}"):
         if file.endswith(".png"):
-            os.remove(f"output/{file}")
+            os.remove(f"output/{tenant_id}/{file}")

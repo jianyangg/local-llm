@@ -153,7 +153,7 @@ def find_leaf_nodes(node, leaf_nodes=[]):
 
     return leaf_nodes
 
-def docParser(file_path, st):
+def docParser(file_path, st, tenant_id):
     layout_root = None
     try:
         reader = LayoutPDFReader(config["nlm_url"])
@@ -197,7 +197,7 @@ def docParser(file_path, st):
         
         # Visualise chunking
         for doc in docs:
-            draw_bounding_box_on_pdf_image(doc.metadata, colour="green", location="chunks/")
+            draw_bounding_box_on_pdf_image(doc.metadata, colour="green", location=f"chunks/{tenant_id}")
 
 
     return docs
@@ -213,7 +213,7 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
         if not os.path.exists(doc_path):
             st.error(f"File {uploaded_file.name} does not exist in {doc_path}.")
             continue
-        doc_splits = docParser(doc_path, st)
+        doc_splits = docParser(doc_path, st, tenant_id)
         print(f"Number of splits: {len(doc_splits)}")
         print("\n")
         combined_doc_splits.extend(doc_splits)

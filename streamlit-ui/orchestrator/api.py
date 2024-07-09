@@ -5,6 +5,7 @@ import traceback
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.llms import Ollama
 from app_config import config
+from termcolor import cprint
 
 # This is the only file that receives both inputs and outputs.
 # So it's convenient to store the chat history here.
@@ -21,13 +22,28 @@ def entry_endpoint():
     tenant_id = data.get('tenant_id')
     chat_mode = data.get('chat_mode', 'Semantic Search w/o Agents')
     generate_title = data.get('generate_title', False)
+    # returns empty list by default
+    convo_hist = data.get('convo_hist', [])
+    # print()
+    # cprint("CONVERSATION HISTORY", 'green')
+    # cprint("---" * 10, "green")
+    # cprint(convo_hist, "green")
+    # print()
 
-    # Initialise chat history
-    if tenant_id not in chat_history:
-        chat_history[tenant_id] = []
+    def process_convo_hist(convo_hist):
+        processed_hist = []
+        # convert to AIMessage and HumanMessage objects
+        for msg in convo_hist:
+            role, content = msg["role"], msg["content"]
+            if role == "user":
+                processed_hist.append(HumanMessage(content=content))
+            else:
+                processed_hist.append(AIMessage(content=content))
 
+        return processed_hist
 
-    print("Chat history for tenant_id:", chat_history[tenant_id])
+    chat_history[tenant_id] = process_convo_hist(convo_hist)
+
     # TODO: Fixed number of 6. Could be made dynamic.
     inputs = {"question": prompt, "chat_history": chat_history[tenant_id][-6:]}
     print("Building ChatApp")
@@ -36,11 +52,10 @@ def entry_endpoint():
     try:
         for output in chat_app.stream(inputs):
             for key, value in output.items():
-                print(f"Finished running: {key}:")
-                pprint(value)
+                print()
+                cprint(f"Finished running: {key}", "yellow")
                 print()
 
-        print(value)
         response = value["generation"]
 
         # Store chat history
@@ -49,9 +64,6 @@ def entry_endpoint():
 
         if "documents" in value:
             documents = [dict(doc.metadata, page_content=doc.page_content) for doc in value["documents"]]  # convert metadata to dict
-            print("Server done.")
-            print(f"Response: {response}")  
-            print(f"Documents: {documents}")
             data = {"response": response, "documents": documents}
         else:
             data = {"response": response}
@@ -70,12 +82,14 @@ def entry_endpoint():
             print(f"Generated Title: {title}")
             data["title"] = title
 
+        cprint("Server has responded.", "green")
+
         # json string
         return json.dumps(data)
 
     except Exception as e:
-        print(f"Error location: {traceback.format_exc()}")
-        print(f"Error: {e}")
+        cprint(f"Error location: {traceback.format_exc()}", "red")
+        cprint(f"Error: {e}", "red")
     
     return f"I'm sorry, I'm unable to generate a response at the moment. Please try again later."
 
