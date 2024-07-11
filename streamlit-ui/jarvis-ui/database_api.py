@@ -1,3 +1,5 @@
+import os
+from app_config import config
 from langchain.docstore.document import Document as LangchainDocument
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.embeddings import OllamaEmbeddings
@@ -5,8 +7,7 @@ from langchain_community.vectorstores import Neo4jVector
 from langchain_community.vectorstores import Neo4jVector
 from langchain_experimental.text_splitter import SemanticChunker
 from llmsherpa.readers import LayoutPDFReader
-import os
-from app_config import config
+from utils import draw_bounding_box_on_pdf_image
 
 ## Load embeddings
 embeddings = OllamaEmbeddings(
@@ -152,7 +153,7 @@ def find_leaf_nodes(node, leaf_nodes=[]):
 
     return leaf_nodes
 
-def docParser(file_path, st):
+def docParser(file_path, st, tenant_id):
     layout_root = None
     try:
         reader = LayoutPDFReader(config["nlm_url"])
@@ -193,6 +194,11 @@ def docParser(file_path, st):
             
         # Convert to Langchain documents
         docs = [LangchainDocument(page_content=collated_pg_content[i], metadata={key: leaf_nodes[i].block_json[key] for key in ('bbox', 'page_idx', 'level')} | {"file_path": file_path}) for i in range(len(collated_pg_content))]
+        
+        # Visualise chunking
+        for doc in docs:
+            draw_bounding_box_on_pdf_image(doc.metadata, colour="green", location=f"chunks/{tenant_id}")
+
 
     return docs
 
@@ -207,7 +213,7 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
         if not os.path.exists(doc_path):
             st.error(f"File {uploaded_file.name} does not exist in {doc_path}.")
             continue
-        doc_splits = docParser(doc_path, st)
+        doc_splits = docParser(doc_path, st, tenant_id)
         print(f"Number of splits: {len(doc_splits)}")
         print("\n")
         combined_doc_splits.extend(doc_splits)
@@ -224,12 +230,14 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
             password=password,
             index_name=tenant_id,
             node_label=tenant_id,
+            # keyword_index_name="keyword",
+            # search_type="hybrid"
         )
         print("Documents written to database")
         return True
     except Exception as e:
-        
-        st.error(e)
+        st.error(e.message)
+        st.error(e.args)
         return False
 
 

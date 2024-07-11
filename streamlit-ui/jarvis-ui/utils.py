@@ -1,8 +1,8 @@
+import fitz
 import hashlib
 import os
-from pdf2image import convert_from_path
 from PIL import ImageDraw
-import fitz
+from pdf2image import convert_from_path
 
 def generate_hasher(unique_id):
     # Create a new sha256 hash object
@@ -12,7 +12,7 @@ def generate_hasher(unique_id):
 def generate_tenant_id(username, password):
     return generate_hasher(username + password)
 
-def draw_bounding_box_on_pdf_image(doc, dpi=200):
+def draw_bounding_box_on_pdf_image(doc, dpi=200, colour="red", location="output/"):
     pdf_path = doc["file_path"]
     page_number = doc["page_idx"]
     coordinates = doc["bbox"]
@@ -38,20 +38,25 @@ def draw_bounding_box_on_pdf_image(doc, dpi=200):
     
     # Draw the bounding box on the image
     draw = ImageDraw.Draw(img)
-    draw.rectangle(scaled_coordinates, outline="red", width=2)
+    draw.rectangle(scaled_coordinates, outline=colour, width=2)
+
+    # Create dir if it doesn't exist
+    if not os.path.exists(location):
+        os.makedirs(location)
 
     # Image file name
-    # take the pdf_path and add page_number
-    # image_path = pdf_path.replace(".pdf", f"_page_{page_number}_{coordinates[1]}.png")
-    image_path = f"output/{pdf_path.split("/")[-1].replace(".pdf", f"_page_{page_number}_{coordinates[1]}.png")}"
+    image_path = f"{location}/{pdf_path.split('/')[-1].replace('.pdf', f'_page_{page_number}_{coordinates[1]}.png')}"
     
     # Save the image with the bounding box
     img.save(image_path)
 
     return image_path
 
-def delete_screenshots():
+def delete_screenshots(tenant_id):
+    if not os.path.exists(f"output/{tenant_id}"):
+        os.makedirs(f"output/{tenant_id}")
+        return
     # delete all the png files in output dir
-    for file in os.listdir("output/"):
+    for file in os.listdir(f"output/{tenant_id}"):
         if file.endswith(".png"):
-            os.remove(f"output/{file}")
+            os.remove(f"output/{tenant_id}/{file}")

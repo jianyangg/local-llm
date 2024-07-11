@@ -1,9 +1,9 @@
-import streamlit as st
-import os
 import database_api
+import os
+import streamlit as st
 import yaml
-from yaml.loader import SafeLoader
 from utils import generate_tenant_id
+from yaml.loader import SafeLoader
 
 try:
 
@@ -110,11 +110,15 @@ try:
                         st.toast("Do not send queries while database is being updated.")
                         print(f"Tenant Name: {st.session_state['username']}")
                         isSuccess = database_api.upload_files(uploaded_files, st, tenant_id=tenant_id)
-                    st.write(f"File upload status: {'Success' if isSuccess else 'Failed'}")
+                    # st.write(f"File upload status: {'Success' if isSuccess else 'Failed'}")
+                    if isSuccess:
+                        st.success("File uploaded.")
+                    else:
+                        st.error("File upload issue. Try again later.")
                 except Exception as e:
-                    st.error("UPLOAD ERROR!")
-                    st.error(f"Error: {e}")
+                    st.error(f"Upload error!\nError: {e}")
 
 except Exception as e:
+    print("Actual error:", e)
     st.error("Please sign in from the Home page and try again.")
     st.stop()
