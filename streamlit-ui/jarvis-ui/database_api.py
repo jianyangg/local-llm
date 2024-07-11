@@ -153,18 +153,23 @@ def find_leaf_nodes(node, leaf_nodes=[]):
 
     return leaf_nodes
 
-def docParser(file_path, st, tenant_id):
+def docParser(file_path, st=None, tenant_id=None, visualise_chunking=False):
     layout_root = None
+
     try:
         reader = LayoutPDFReader(config["nlm_url"])
         try:
             parsed_doc = reader.read_pdf(file_path)
         except FileNotFoundError:
-            st.error(f"File {file_path} not found.")
+            if st is not None:
+                st.error(f"File {file_path} not found.")
+            print(f"File {file_path} not found.")
             return []
         layout_root = parsed_doc.root_node
     except Exception as e:
-        st.error("Error:", e)
+        if st is not None:
+            st.error("Error:", e)
+        print("Error:", e)
 
     leaf_nodes = find_leaf_nodes(layout_root)
 
@@ -195,9 +200,10 @@ def docParser(file_path, st, tenant_id):
         # Convert to Langchain documents
         docs = [LangchainDocument(page_content=collated_pg_content[i], metadata={key: leaf_nodes[i].block_json[key] for key in ('bbox', 'page_idx', 'level')} | {"file_path": file_path}) for i in range(len(collated_pg_content))]
         
-        # Visualise chunking
-        for doc in docs:
-            draw_bounding_box_on_pdf_image(doc.metadata, colour="green", location=f"chunks/{tenant_id}")
+        if visualise_chunking:
+            # Visualise chunking
+            for doc in docs:
+                draw_bounding_box_on_pdf_image(doc.metadata, colour="green", location=f"chunks/{tenant_id}")
 
 
     return docs
