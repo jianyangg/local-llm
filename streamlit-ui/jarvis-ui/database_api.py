@@ -1,3 +1,5 @@
+import os
+from app_config import config
 from langchain.docstore.document import Document as LangchainDocument
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.embeddings import OllamaEmbeddings
@@ -5,8 +7,6 @@ from langchain_community.vectorstores import Neo4jVector
 from langchain_community.vectorstores import Neo4jVector
 from langchain_experimental.text_splitter import SemanticChunker
 from llmsherpa.readers import LayoutPDFReader
-import os
-from app_config import config
 from utils import draw_bounding_box_on_pdf_image
 
 ## Load embeddings

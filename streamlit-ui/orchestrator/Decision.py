@@ -79,14 +79,13 @@ class Decision:
         if decision["datasource"] == "generate":
             print("Route decided: Generate answer without RAG.")
             return "generate"
-        elif decision["datasource"] == "vectorstore":
+        if decision["datasource"] == "vectorstore":
             print("Route decided: Retrieve documents.")
             # TODO: implement the retrieval of documents
             return "vectorstore"
-        else:
-            # Should not reach here
-            print("Error: Invalid decision in initial_routing.")
-            return "giveup"
+        
+        print("Error")
+        return "generate"
 
 
     def give_up(self, state: GraphState):
@@ -190,7 +189,6 @@ class Decision:
         print("Grading documents...")
         question = state["question"]
         documents = state["documents"]
-        chat_history = state["chat_history"]
 
         # Score each doc
         filtered_docs = []
@@ -199,7 +197,6 @@ class Decision:
             score = self.custom_llm.retrieval_grader(
                 question,
                 d.page_content,
-                chat_history
             )
             ## recall that the score variable holds a json {"score": "yes"}
             print("Score:", score)
@@ -220,8 +217,8 @@ class Decision:
         else:
             give_up = "no"
 
-        # give_up status
-        return {"documents": filtered_docs, "question": question, "give_up": give_up, "chat_history": chat_history}
+        # give_up status and initialise attempts and feedback
+        return {"documents": filtered_docs, "question": question, "give_up": give_up, "attempts": 0, "feedback": ""}
 
 
     def generate_answer(self, state):
@@ -238,22 +235,22 @@ class Decision:
         question = state["question"]
         documents = state["documents"]
         chat_history = state["chat_history"]
-
-        # limit due to limited context length of llm
-        limit = 7500
+        feedback = state["feedback"]
 
         # process documents stored in the compressed_docs
         docs = [doc.page_content for doc in documents]
         context = "\n\n---\n\n".join(docs)
+        limit = 2000
+        if len(context) > limit:
+            context = context[:limit]
 
-        # remove all text past limit
-        context = context[:limit]
+        generated_answer = self.custom_llm.answer_generator(context=context, qn=question, chat_history=chat_history, feedback=feedback)
 
-        generated_answer = self.custom_llm.answer_generator(context=context, qn=question, chat_history=chat_history)
-
-        cprint(f"Chat History: {chat_history}", "yellow")
+        print()
         cprint(f"Question: {question}", "yellow")
+        print()
         cprint(f"Answer: {generated_answer}", "yellow")
+        print("---" * 20)
 
         # Only the last item is generated in this function
         return {"documents": documents, "question": question, "generation": generated_answer, "chat_history": chat_history}
@@ -274,8 +271,8 @@ class Decision:
         give_up = state["give_up"]
 
         if give_up == "yes":
-            print("Decision: Give up.")
-            return "give up"
+            print("Decision: Generate with LLM directly.")
+            return "llm"
         else:
             # We have relevant documents, so generate answer
             print("Decision: Generate answer.")
@@ -299,7 +296,6 @@ class Decision:
         documents = state["documents"]
         generation = state["generation"]
         chat_history = state["chat_history"]
-        limit = 7500
 
         # process documents stored in the compressed_docs
         docs_content = [doc.page_content for doc in documents]
@@ -312,7 +308,7 @@ class Decision:
 
         score = self.custom_llm.hallucination_grader(
             generated_answer=generation,
-            documents=context[:limit],
+            documents=context[:4000], # limit the context to 4000 characters; arbitrary number < 8k
         )
 
         print("SCORE", score)
@@ -376,3 +372,94 @@ class Decision:
         chat_history = state["chat_history"]
         rephrased_question = self.custom_llm.rephraser(question, chat_history)
         return {"question": rephrased_question, "chat_history": chat_history}
+    
+
+    def give_feedback(self, state):
+        # This is on the RAG path.
+        # critic grades the generation based on relevance to documents first then to answer
+        # critic then leaves feedback on generation based on relevance to documents first then to answer
+        # if any of the feedback is negative, the critic will ask for a re-generation
+        print("Critic: Grading generation...")
+        question = state["question"]
+        documents = state["documents"]
+        generation = state["generation"]
+        chat_history = state["chat_history"]
+        feedback = state["feedback"]
+        attempts = state["attempts"]
+
+        # Within attempts
+        # ---------------
+        # Check: Documents grounded in generation
+        doc_feedback = "Include the following content in your answer:"
+        bad_doc_count = 0
+        for doc in documents:
+            reply = self.custom_llm.hallucination_grader(
+                generated_answer=generation,
+                documents=doc.page_content
+            )
+            grade = reply["score"]
+            reason = reply["reason"]
+            if grade == "no":
+                # Answer is not based on this document.
+                doc_feedback += "\n\n" + reason
+                bad_doc_count += 1
+            # else pass
+
+        print(f"Feedback: Answer deviated from {bad_doc_count} documents.")
+
+        # Check: Answer useful
+        ans_useful = True
+        ans_check = self.custom_llm.answer_grader(generated_answer=generation, qn=question, chat_history=chat_history)
+        # Try again till we get a score
+        count = 0
+        while "score" not in ans_check and count < 3:
+            ans_check = self.custom_llm.answer_grader(generated_answer=generation, qn=question, chat_history=chat_history)
+            count += 1
+        
+        # If still don't have
+        if "score" not in ans_check:
+            print("Using default score of \"no\"")
+            ans_check = {"score": "no"}
+        if ans_check["score"] == "no":
+            print("Feedback: Answer not useful in answering the question.")
+            answer_feedback = "Improve your answer by addressing the following points:"
+            answer_feedback += "\n\n" + self.custom_llm.generate_ans_feedback(generated_answer=generation, qn=question, chat_history=chat_history,)
+            ans_useful = False
+        else:
+            print("Feedback: Answer useful in answering the question.")
+
+        # Collate feedback
+        feedback = doc_feedback if bad_doc_count > 0 else ""
+        feedback += "\n\n" + answer_feedback if not ans_useful else ""
+
+        attempts += 1
+        if attempts > 2:
+            # If max attempts reached, some documents still not useful but answer is useful
+            # Return generation
+            if ans_useful:
+                return {"generation": generation, "verdict": "completed", "documents": documents}
+            else:
+                # This is if the rag approach fails to generate a meaningful response
+                print("Max attempts reached.")
+                # Max number of retries reached
+                # Suggests the loop does not produce meaningful results
+                # Return generation 
+                generation = "_I'm sorry, I'm unable to generate a meaningful response. However, see below for my attempt._\n\n" + generation
+                return {"generation": generation, "verdict": "completed", "documents": documents}
+
+
+        # If feedback is empty, we can end the conversation by returning "completed"
+        if feedback == "":
+            return {"generation": generation, "verdict": "completed", "documents": documents}
+        else:
+            # Return feedback and increase attempts (and return it)
+            cprint("---" * 20, "red")
+            cprint(f"Final feedback: {feedback}", "red")
+            cprint("---" * 20, "red")
+            cprint(f"Number of attempts: {attempts}", "red")
+            # limit feedback due to context size restrictions
+            feedback = feedback[:4000]
+            return {"feedback": feedback, "attempts": attempts, "verdict": "generate", "prev_ans": generation, "documents": documents}
+        
+    def critic_rerouter(self, state):
+        return state["verdict"]

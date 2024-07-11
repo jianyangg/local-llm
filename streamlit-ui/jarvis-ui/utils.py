@@ -1,8 +1,8 @@
+import fitz
 import hashlib
 import os
-from pdf2image import convert_from_path
 from PIL import ImageDraw
-import fitz
+from pdf2image import convert_from_path
 
 def generate_hasher(unique_id):
     # Create a new sha256 hash object
@@ -54,6 +54,7 @@ def draw_bounding_box_on_pdf_image(doc, dpi=200, colour="red", location="output/
 
 def delete_screenshots(tenant_id):
     if not os.path.exists(f"output/{tenant_id}"):
+        os.makedirs(f"output/{tenant_id}")
         return
     # delete all the png files in output dir
     for file in os.listdir(f"output/{tenant_id}"):

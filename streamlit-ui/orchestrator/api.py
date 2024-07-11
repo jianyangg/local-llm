@@ -44,8 +44,7 @@ def entry_endpoint():
 
     chat_history[tenant_id] = process_convo_hist(convo_hist)
 
-    # TODO: Fixed number of 6. Could be made dynamic.
-    inputs = {"question": prompt, "chat_history": chat_history[tenant_id][-6:]}
+    inputs = {"question": prompt, "chat_history": chat_history[tenant_id]}
     print("Building ChatApp")
     chat_app = buildChatApp(tenant_id, chat_mode)
 
@@ -57,6 +56,9 @@ def entry_endpoint():
                 print()
 
         response = value["generation"]
+        cprint("---" * 20, "green")
+        cprint(response, "green")
+        cprint("---" * 20, "green")
 
         # Store chat history
         chat_history[tenant_id].append(HumanMessage(content=prompt))

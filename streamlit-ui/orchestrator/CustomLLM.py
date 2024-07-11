@@ -1,18 +1,51 @@
 from langchain_community.llms import Ollama
+# from langchain_community.chat_models import ChatOllama
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.output_parsers import StrOutputParser
 from app_config import config
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import HumanMessage, AIMessage
 from termcolor import cprint
 
 # TODO: Add additional variable into graph state to keep feedback on the responses from grader, should there be retries.
 class CustomLLM:
     def __init__(self, tenant_id: str):
         self.json_parser = JsonOutputParser()
-        self.json_llm = Ollama(model=config["llm_name"], temperature=0, format="json", base_url=config["ollama_base_url"])
-        self.llm = Ollama(model=config["llm_name"], temperature=0, base_url=config["ollama_base_url"])
+        self.str_parser = StrOutputParser()
+        self.json_llm = Ollama(model=config["llm_name"], temperature=0, format="json", base_url=config["ollama_base_url"], verbose=False)
+        self.llm = Ollama(model=config["llm_name"], temperature=0, base_url=config["ollama_base_url"], verbose=False)
         self.tenant_id = tenant_id
+        chat_hist_summariser_prompt = PromptTemplate(
+            template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+            You are a summarizer tasked with collating what ONE party has said.
+            You are to provide a brief overview of the content.
+            The summary should be concise and capture the key points of the content.
+            Return the summary with no preamble or explanation.
+            If there's nothing to summarise, return an empty string.
+            YOU HAVE NO PERSONALITY and YOURE JUST A TOOL. DO NOT REPLY TO THE USER, JUST DO YOUR JOB.
+            <|start_header_id|>user<|end_header_id|>
+            Content: {chat_history}
+            DO NOT BE VERBOSE. BE VERY CONCISE.
+            <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+            input_variables=["chat_history"],
+        )
+        self.chat_hist_summariser = chat_hist_summariser_prompt | self.llm | self.str_parser
+    
+    def get_summarised_prev_ans(self, prev_ans: str):
+        summarised_prev_ans = self.llm.invoke(f"Summarise and be concise: {prev_ans}")
+        return summarised_prev_ans
+
+    def get_summarised_chat_hist(self, chat_history: list):
+        # Separetely summarise the chat history for human and AI messages
+        human_convo_hist_list = [msg.content for idx, msg in enumerate(chat_history) if idx % 2 == 0]
+        human_convo_hist = " ".join(human_convo_hist_list)
+        ai_convo_hist_list = [msg.content for idx, msg in enumerate(chat_history) if idx % 2 == 1]
+        ai_convo_hist = " ".join(ai_convo_hist_list)
+        summarised_human_hist = self.chat_hist_summariser.invoke({"chat_history": human_convo_hist})
+        summarised_ai_hist = self.chat_hist_summariser.invoke({"chat_history": ai_convo_hist})
+        collated_summaries = [HumanMessage(content=summarised_human_hist), AIMessage(content=summarised_ai_hist)]
+        return collated_summaries
 
     def initial_router(self, prompt: str, chat_history: list):
         """
@@ -50,7 +83,7 @@ class CustomLLM:
 
         return routing_pipeline.invoke({"question": prompt})
     
-    def retrieval_grader(self, qn: str, doc_content: str, chat_history: list):
+    def retrieval_grader(self, qn: str, doc_content: str):
         """
         Use LLM to grade the relevance of a document to a user question.
 
@@ -88,7 +121,7 @@ class CustomLLM:
             {"question": qn, "document": doc_content}
         )
     
-    def answer_generator(self, context: str, qn: str, chat_history: list):
+    def answer_generator(self, context: str, qn: str, chat_history: list, feedback: str, prev_ans = ""):
         """
         Use LLM to generate an answer to a user question based on a context.
         
@@ -100,14 +133,28 @@ class CustomLLM:
             str: The generated answer
         """
 
-        answerer_prompt = ChatPromptTemplate.from_messages(
+        answerer_prompt_no_feedback = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     """
                     <|begin_of_text|>
                     <|start_header_id|>system<|end_header_id|>
-                    You are a highly knowledgeable and structured Retrieval QA model. You are given a query and a set of documents.
+                    You are called a DSTA Chatbot called Jarvis.
+                    You are to be helpful, friendly, and professional.
+                    You are given a query and a set of documents.
+                    Answer the query based on the documents and the chat history provided below.
+                    <|start_header_id|>user<|end_header_id|>
+                    ONLY REFERENCE THE CHAT HISTORY IF IT HELPS YOU ANSWER THE QUESTION.
+                    Chat History:
+                    """
+                ),
+                MessagesPlaceholder(variable_name="chat_history"),
+                (
+                    "human",
+                    """
+                    Answer this question: {query}
+                    Documents to reference: {documents}
                     Your task is to provide a detailed and well-structured answer based on the documents provided.
                     The documents have all been pre-processed and are determined by your overlords to be relevant to the query -- do not second-guess them.
                     Please ensure that your answer is clear, concise, and divided into the following sections:
@@ -116,8 +163,22 @@ class CustomLLM:
                     3. **Detailed Answer**: Provide a thorough and detailed answer to the query, integrating information from the documents.
                     4. **Conclusion**: Summarize the key points and provide any additional insights or recommendations if relevant.
                     Remember to keep your answers concise and structured.
-                    You must include hyperlinks with markdown syntax ie (file name) related to the sentences wherever necessary, if applicable.
+                    <|eot_id|><|start_header_id|>assistant<|end_header_id|>
+                    """
+                )
+            ]
+        )
+
+        answerer_prompt_w_feedback = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    """
+                    <|begin_of_text|>
+                    <|start_header_id|>system<|end_header_id|>
+                    You are a highly knowledgeable and structured Retrieval QA model. You are given a query and a set of documents.
                     <|start_header_id|>user<|end_header_id|>
+                    ONLY REFERENCE THE CHAT HISTORY IF IT HELPS YOU ANSWER THE QUESTION.
                     Chat History:
                     """
                 ),
@@ -125,25 +186,29 @@ class CustomLLM:
                 (
                     "human",
                     """
+                    Feedback: {feedback}
+                    Your task is to EDIT THE FOLLOWING ANSWER BASED ON THE PROVIDED FEEDBACK
+                    MINIMISE EDITS TO THE ANSWER. SLIGHT MODIFICATIONS BASED ON THE FEEDBACK ONLY.
+                    Answer to be improved: {prev_ans}
                     Please ensure that your answer is clear, concise, and divided into the following sections:
                     1. **Introduction**: Briefly summarize the query and the context.
                     2. **Key Information from Documents**: Highlight the most relevant information from the documents that directly addresses the query.
                     3. **Detailed Answer**: Provide a thorough and detailed answer to the query, integrating information from the documents.
                     4. **Conclusion**: Summarize the key points and provide any additional insights or recommendations if relevant.
                     Remember to keep your answers concise and structured.
-                    You must include hyperlinks with markdown syntax ie (file name) related to the sentences wherever necessary, if applicable.
-                    Answer this question based on the documents below and chat history above: {query}
-                    Documents: {documents}
                     <|eot_id|><|start_header_id|>assistant<|end_header_id|>
                     """
                 )
             ]
         )
 
-        answer_pipeline = answerer_prompt | self.llm | StrOutputParser()
-        generated_answer = answer_pipeline.invoke({"query": qn, "documents": context, "chat_history": chat_history})
+        answer_pipeline = (answerer_prompt_no_feedback if feedback == "" else answerer_prompt_w_feedback) | self.llm | StrOutputParser()
+        cprint("Running history summariser", "yellow")
+        summarised_chat_history = self.get_summarised_chat_hist(chat_history)
+        cprint(f"Summarised chat history: {summarised_chat_history}", "yellow")
+        generated_answer = answer_pipeline.invoke({"query": qn, "documents": context, "chat_history": summarised_chat_history}) if feedback == "" else answer_pipeline.invoke({"query": qn, "documents": context, "chat_history": summarised_chat_history, "feedback": feedback, "prev_ans": prev_ans})
         print("---" * 5)
-        print("Temp answer:")
+        print("Draft answer:")
         print(generated_answer)
         print("---" * 5)
 
@@ -166,28 +231,36 @@ class CustomLLM:
             template="""
             <|begin_of_text|>
             <|start_header_id|>system<|end_header_id|>
-            You are a grader assessing whether 
-            an answer is grounded in / supported by a set of facts. Give a binary 'yes' or 'no' score to indicate 
-            whether the answer is grounded in / supported by a set of facts. Provide the binary score as a JSON with a 
-            single key 'score' and no preamble or explanation.
+            You are a grader assessing whether the answer has referenced the given factual information.
+            Give a binary 'yes' or 'no' score to indicate 
+            whether a piece of factual information is found in the answer. 
+            Provide the binary score as a JSON with a 
+            one key 'score' and just one more key "reason" with the content to add.
 
-            Format: "score": "yes" or "score": "no"
+            Format: "score": "yes" or "score": "no", "reason": REPLACE_W_CONTENT_TO_ADD
+
+            Content to add should be DIRECT instead of passive, such as "Add abc" instead of "It's missing abc".
+            Give the SPECIFIC content to add, instead of a general idea of it. In other words, give the answer instead of general guidance.
+
+            Give a "yes" if ANY part of the answer references the factual document chunk.
+            Give a "no" otherwise, but justify your answer with a VERY BRIEF explanation.
+            The "reason" should have DIRECT ACTIONABLE FEEDBACK.
             <|eot_id|><|start_header_id|>user<|end_header_id|>
-            Here are the facts:
+            Here is the reference document chunk:
             \n ------- \n
-            {documents} 
+            {document} 
             \n ------- \n
             Here is the answer: {generation}
             Remember to format your answer as either "score": "yes" or "score": "no"
             <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
 
-            input_variables=["generation", "documents"],
+            input_variables=["generation", "document"],
         )
 
         hallucination_grading_pipeline = hallucination_prompt | self.json_llm | JsonOutputParser()
 
         return hallucination_grading_pipeline.invoke(
-                {"generation": generated_answer, "documents": documents}
+                {"generation": generated_answer, "document": documents}
             )
 
     def answer_grader(self, generated_answer: str, qn: str, chat_history: list):
@@ -213,7 +286,11 @@ class CustomLLM:
                     <|start_header_id|>system<|end_header_id|>
                     You are a grader assessing whether an 
                     answer is useful to resolve a question. Give a binary score 'yes' or 'no' to indicate whether the answer is 
-                    useful to resolve a question. Provide the binary score as a JSON with a single key 'score' and no preamble or explanation.
+                    useful to resolve a question. Provide the binary score as a JSON with a key 'score' and another key "reason" on how to improve the answer.
+                    Format: "score": "yes" or "score": "no", "reason": REPLACE_W_DIRECT_ACTIONABLE_FEEDBACK
+                    Do not provide any preamble or explanation, especially for the reason.
+                    The reason should have DIRECT ACTIONABLE FEEDBACK. For example, instead of saying "Not useful", say "Add more details on xyz".
+                    Keep the reason CONCISE.
                     <|start_header_id|>user<|end_header_id|>
                     Chat History:
                     """
@@ -299,7 +376,7 @@ class CustomLLM:
                     You are a rephraser. 
                     Your task is to read through the following messages and rephrase the user's question to add more context, making it more specific and meaningful for document retrieval. 
                     The message immediately preceding the question is likely to be the most relevant for rephrasing.
-                    Use the chat history to identify key context and keywords that can make the rephrased question more specific.
+                    It's optional to use the chat history to identify key context and keywords that can make the rephrased question more specific.
                     Do not respond to the user; only rephrase the question.
                     Do not rephrase text within double quotes.
                     <|start_header_id|>user<|end_header_id|>
@@ -312,6 +389,8 @@ class CustomLLM:
                     """
                     Question to rephrase: {question}
                     Provide your rephrased question directly without any preamble or additional response. 
+                    If you do not think the question needs rephrasing, respond with the original question.
+                    DO NOT include any additional information or context in your response.
                     <|eot_id|><|start_header_id|>assistant<|end_header_id|>
                     """
                 )
@@ -324,3 +403,31 @@ class CustomLLM:
         cprint(f"Original question: {qn}", "red")
         cprint(f"Rephrased question for retrieval: {rephrased_prompt}", "green")
         return rephrased_prompt
+    
+    def generate_ans_feedback(self, generated_answer: str, qn: str, chat_history: list):
+        """
+        Use LLM to grade whether an answer is useful for a question.
+        """
+        summarised_chat_history = self.get_summarised_chat_hist(chat_history)
+
+        feedback_prompt = PromptTemplate(
+            template="""
+                <begin_of_text>
+                <|start_header_id|>system<|end_header_id|>
+                The answer is deemed to be not useful in answering the question.
+                Review the answer in light of the question and the chat history given below.
+                Provide feedback on how to improve the answer and suggest improvements in a CLEAR and CONCISE manner.
+                Limit your response to at most 2 sentences.
+                Exclude any preamble or explanation.
+                <|start_header_id|>user<|end_header_id|>
+                Chat History: {chat_history}
+                Question: {question}
+                Answer: {generation}
+                <|eot_id|><|start_header_id|>assistant<|end_header_id|>
+            """,
+            input_variables=["question", "generation", "chat_history"],
+        )
+
+        feedback_pipeline = feedback_prompt | self.llm | StrOutputParser()
+
+        return feedback_pipeline.invoke({"question": qn, "generation": generated_answer, "chat_history": summarised_chat_history})

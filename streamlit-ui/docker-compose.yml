@@ -8,7 +8,12 @@ services:
     ports:
       - "8501:8501"
     volumes:
+    # Consider adding volumes for the screenshots as well
       - ./jarvis-ui/auth/config.yaml:/app/auth/config.yaml
+      - ./jarvis-ui/chunks:/app/chunks
+      - ./jarvis-ui/chat_history:/app/chat_history
+      - ./jarvis-ui/output:/app/output
+      - ./jarvis-ui/documents:/app/documents
     depends_on:
       - nlm-ingestor # for chunking during uploading
 
@@ -40,7 +45,7 @@ services:
     expose:
       - 11434 # for communication b/w containers within network
     environment:
-      OLLAMA_NUM_PARALLEL: "5" # adjust if needed
+      OLLAMA_NUM_PARALLEL: "4" # adjust if needed
     volumes:
       - ollama:/root/.ollama
       - ./ollama_entrypoint.sh:/ollama_entrypoint.sh

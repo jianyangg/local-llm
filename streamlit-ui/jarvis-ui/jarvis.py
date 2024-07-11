@@ -1,13 +1,13 @@
-import streamlit as st
-import requests
 import json
+import os
+import requests
+import streamlit as st
 import streamlit_authenticator as stauth
 import yaml
-from yaml.loader import SafeLoader
-from utils import generate_tenant_id, delete_screenshots, draw_bounding_box_on_pdf_image
 from app_config import config
-import os
 from termcolor import cprint
+from utils import generate_tenant_id, delete_screenshots, draw_bounding_box_on_pdf_image
+from yaml.loader import SafeLoader
 
 st.set_page_config(page_title="Jarvis", page_icon="🤖")
 
@@ -174,11 +174,11 @@ def home(username, name):
 
     # Add chat mode selection to the sidebar
     with st.sidebar:
-        chat_mode = st.selectbox("Select a chat mode", options=("Jarvis", "Semantic Search w Agents", "Semantic Search w/o Agents", "Chatbot"), index=2)
+        chat_mode = st.selectbox("Select a chat mode", options=("Jarvis", "Semantic Search w Agents", "Semantic Search w/o Agents", "Chatbot"), index=1)
         convo_title = st.selectbox("Select a conversation", options=past_convos, index=0 if prev_convo_title == "Start" else past_convos.index(prev_convo_title))
 
-    cprint(f"Previous convo title: {prev_convo_title}", "light_cyan")
-    cprint(f"Current convo title: {convo_title}", "light_cyan")
+    # cprint(f"Previous convo title: {prev_convo_title}", "light_cyan")
+    # cprint(f"Current convo title: {convo_title}", "light_cyan")
 
     # default value
     generate_title = False
@@ -272,12 +272,8 @@ def home(username, name):
         if convo_title == "New chat":
             cprint("WRONG! It should not be New chat", "red")
         update_convo(tenant_id, st.session_state.users_messages[username], convo_title)
-        cprint(f"Conversation History is {st.session_state.users_messages[username]}", "light_blue")
+        # cprint(f"Conversation History is {st.session_state.users_messages[username]}", "light_blue")
         cprint("Conversation history saved.", "light_blue")
-
-        cprint(f"Previous convo title: {prev_convo_title}", "light_cyan")
-        cprint(f"Current convo title: {convo_title}", "light_cyan")
-
 
 
 def get_past_convos(tenant_id):
