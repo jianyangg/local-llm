@@ -18,29 +18,39 @@ class CustomLLM:
         self.tenant_id = tenant_id
         chat_hist_summariser_prompt = PromptTemplate(
             template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-            You are a summarizer tasked with collating what ONE party has said.
-            You are to provide a brief overview of the content.
-            The summary should be concise and capture the key points of the content.
-            Return the summary with no preamble or explanation.
-            If there's nothing to summarise, return an empty string.
-            YOU HAVE NO PERSONALITY and YOURE JUST A TOOL. DO NOT REPLY TO THE USER, JUST DO YOUR JOB.
+            You are a summarizer focused on extracting and condensing the statements made by a single designated party within a chat conversation.
+
+            Your goal is to:
+
+            1. Identify all messages belonging to the target party.
+            2. Extract the core ideas and information from those messages.
+            3. Synthesize a concise summary that reflects the essence of their communication.
+            4. If the target party has not spoken or if there is no chat history to analyze, return an empty string.
+
+            Crucial Instructions:
+
+            * Your response should ONLY be the summary; do not include any introductory phrases or explanations.
+            * Prioritize brevity and focus on the most salient points.
+            * Avoid adding your own interpretations or opinions.
+
             <|start_header_id|>user<|end_header_id|>
-            Content: {chat_history}
-            DO NOT BE VERBOSE. BE VERY CONCISE.
+            Target Party: [Name or identifier of the person you want to summarize]
+            Content: {chat_history} 
             <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
             input_variables=["chat_history"],
         )
         self.chat_hist_summariser = chat_hist_summariser_prompt | self.llm | self.str_parser
-    
-    def get_summarised_prev_ans(self, prev_ans: str):
-        summarised_prev_ans = self.llm.invoke(f"Summarise and be concise: {prev_ans}")
-        return summarised_prev_ans
 
     def get_summarised_chat_hist(self, chat_history: list):
         # Separetely summarise the chat history for human and AI messages
         human_convo_hist_list = [msg.content for idx, msg in enumerate(chat_history) if idx % 2 == 0]
+        print("Length of convo hist (human):", len(human_convo_hist_list))
         human_convo_hist = " ".join(human_convo_hist_list)
         ai_convo_hist_list = [msg.content for idx, msg in enumerate(chat_history) if idx % 2 == 1]
+        print("Length of convo hist (AI):", len(ai_convo_hist_list))
+        if len(ai_convo_hist_list) == 0:
+            # The first run don't need chat history
+            return [HumanMessage(content=""), AIMessage(content="")]
         ai_convo_hist = " ".join(ai_convo_hist_list)
         summarised_human_hist = self.chat_hist_summariser.invoke({"chat_history": human_convo_hist})
         summarised_ai_hist = self.chat_hist_summariser.invoke({"chat_history": ai_convo_hist})
@@ -64,10 +74,9 @@ class CustomLLM:
             template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
             You are an expert at deciding whether a question
             requires the retrieval of information from a vectorstore before generating a response or to go straight to generating a response.
-            Generic questions that can be answered without data are not worth
-            routing to the vectorstore and should be answered directly through generation.
-            If questions refer you to a knowledge base or a data source, you should route the question to the 'vectorstore'. Otherwise, you should
-            reply 'generate' to answer the question directly.
+            Generic questions that can be answered without data should be answered directly through generation so 'generate'.
+            If questions refer you to a knowledge base or a data source or might be supplemented with documents in knowledge base,
+            you should route the question to the 'vectorstore'.
             If the question DOES NOT hint at the use of your knowledge base, you should route the question to 'generate'.
             Give a binary choice of 'generate' if question requires NO reference to the datasource, and 'vectorstore' if it does.
             Return a JSON with a single key 'datasource' and 
@@ -156,7 +165,6 @@ class CustomLLM:
                     Answer this question: {query}
                     Documents to reference: {documents}
                     Your task is to provide a detailed and well-structured answer based on the documents provided.
-                    The documents have all been pre-processed and are determined by your overlords to be relevant to the query -- do not second-guess them.
                     Please ensure that your answer is clear, concise, and divided into the following sections:
                     1. **Introduction**: Briefly summarize the query and the context.
                     2. **Key Information from Documents**: Highlight the most relevant information from the documents that directly addresses the query.
@@ -186,10 +194,11 @@ class CustomLLM:
                 (
                     "human",
                     """
+                    Query: {query}
                     Feedback: {feedback}
+                    Documents to reference: {documents}
                     Your task is to EDIT THE FOLLOWING ANSWER BASED ON THE PROVIDED FEEDBACK
                     MINIMISE EDITS TO THE ANSWER. SLIGHT MODIFICATIONS BASED ON THE FEEDBACK ONLY.
-                    Answer to be improved: {prev_ans}
                     Please ensure that your answer is clear, concise, and divided into the following sections:
                     1. **Introduction**: Briefly summarize the query and the context.
                     2. **Key Information from Documents**: Highlight the most relevant information from the documents that directly addresses the query.
@@ -206,7 +215,7 @@ class CustomLLM:
         cprint("Running history summariser", "yellow")
         summarised_chat_history = self.get_summarised_chat_hist(chat_history)
         cprint(f"Summarised chat history: {summarised_chat_history}", "yellow")
-        generated_answer = answer_pipeline.invoke({"query": qn, "documents": context, "chat_history": summarised_chat_history}) if feedback == "" else answer_pipeline.invoke({"query": qn, "documents": context, "chat_history": summarised_chat_history, "feedback": feedback, "prev_ans": prev_ans})
+        generated_answer = answer_pipeline.invoke({"query": qn, "documents": context, "chat_history": summarised_chat_history}) if feedback == "" else answer_pipeline.invoke({"query": qn, "documents": context, "chat_history": summarised_chat_history, "feedback": feedback})
         print("---" * 5)
         print("Draft answer:")
         print(generated_answer)
@@ -333,10 +342,16 @@ class CustomLLM:
                     """
                     <|begin_of_text|>
                     <|start_header_id|>system<|end_header_id|>
-                    You are called a DSTA Chatbot called Jarvis.
-                    Answer the following question in a helpful, friendly, and PROFESSIONAL manner.
-                    Ask follow up questions where you deem relevant.
-                    <|start_header_id|>user<|end_header_id|>
+                    You are the DSTA chatbot named Jarvis. Your primary goal is to assist users effectively.
+
+                    Guidelines:
+
+                    Be helpful, friendly, and professional in your responses.
+                    Thoroughly analyze the user's question and chat history.
+                    If the question is unclear or requires more information, ask clarifying questions.
+                    If you can confidently answer the question, provide a concise, accurate response.
+                    Avoid speculation or assumptions.
+                    Maintain a professional tone throughout the conversation. <|start_header_id|>user<|end_header_id|> 
                     Chat History:
                     """
                 ),
@@ -373,12 +388,10 @@ class CustomLLM:
                     """
                     <|begin_of_text|>
                     <|start_header_id|>system<|end_header_id|>
-                    You are a rephraser. 
-                    Your task is to read through the following messages and rephrase the user's question to add more context, making it more specific and meaningful for document retrieval. 
-                    The message immediately preceding the question is likely to be the most relevant for rephrasing.
-                    It's optional to use the chat history to identify key context and keywords that can make the rephrased question more specific.
-                    Do not respond to the user; only rephrase the question.
-                    Do not rephrase text within double quotes.
+                    You are an expert at rephrasing questions for document retrieval.
+                    You are to make VERY SLIGHT edits to the question to make it more suitable for retrieval.
+                    DO NOT change any nouns, entities, organisations, persons, topics or the core meaning of the question.
+                    Only ADD words from the chat history to provide additional context, BUT ONLY IF CONTEXT IS NEEDED.
                     <|start_header_id|>user<|end_header_id|>
                     Chat History:
                     """
@@ -387,10 +400,13 @@ class CustomLLM:
                 (
                     "human",
                     """
-                    Question to rephrase: {question}
-                    Provide your rephrased question directly without any preamble or additional response. 
-                    If you do not think the question needs rephrasing, respond with the original question.
-                    DO NOT include any additional information or context in your response.
+                    Question to improve: {question}
+                    REMINDER:
+                    You are to make VERY SLIGHT edits to the question to make it more suitable for retrieval.
+                    DO NOT change any nouns, entities, organisations, persons, topics or the core meaning of the question.
+                    Only ADD words from the chat history to provide additional context, BUT ONLY IF CONTEXT IS NEEDED.
+                    DO NOT include any preamble or explanation.
+                    IMPORTANT! DO NOT ADD ITEMS FROM CHAT HISTORY IF IT IS NOT NEEDED. 
                     <|eot_id|><|start_header_id|>assistant<|end_header_id|>
                     """
                 )
@@ -414,11 +430,9 @@ class CustomLLM:
             template="""
                 <begin_of_text>
                 <|start_header_id|>system<|end_header_id|>
-                The answer is deemed to be not useful in answering the question.
-                Review the answer in light of the question and the chat history given below.
-                Provide feedback on how to improve the answer and suggest improvements in a CLEAR and CONCISE manner.
-                Limit your response to at most 2 sentences.
-                Exclude any preamble or explanation.
+                Evaluate the answer's relevance to the question and chat history.
+                Provide clear, concise feedback (max. 2 sentences) on how to improve the answer.
+                Focus on specific changes and avoid general comments.
                 <|start_header_id|>user<|end_header_id|>
                 Chat History: {chat_history}
                 Question: {question}

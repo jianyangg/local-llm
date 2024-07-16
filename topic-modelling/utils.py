@@ -1,17 +1,13 @@
-import os
-from app_config import config
 from langchain.docstore.document import Document as LangchainDocument
 from langchain_community.embeddings import OllamaEmbeddings
-from langchain_community.vectorstores import Neo4jVector
 from langchain_experimental.text_splitter import SemanticChunker
 from llmsherpa.readers import LayoutPDFReader
-from utils import draw_bounding_box_on_pdf_image
 
-## Load embeddings
-embeddings = OllamaEmbeddings(
-    base_url=config["ollama_base_url"],	
-    model=config["llm_name"]
-)
+config = {
+    "ollama_base_url": "http://localhost:11434",
+    "llm_name": "ollama",
+    "nlm_url": "http://localhost:5001",
+}
 
 def parent_chain(node):
     """
@@ -77,9 +73,7 @@ def is_use_semantic_chunking(leaf_nodes):
     print("Number of paragraphs:", num_paras)
     return count > num_paras/2
 
-def find_leaf_nodes(node, leaf_nodes=None):
-    if leaf_nodes is None:
-        leaf_nodes = []
+def find_leaf_nodes(node, leaf_nodes=[]):
 
     if len(node.children) == 0:
         leaf_nodes.append(node)
@@ -87,7 +81,6 @@ def find_leaf_nodes(node, leaf_nodes=None):
         find_leaf_nodes(child, leaf_nodes)
 
     return leaf_nodes
-
 
 def docParser(file_path, st=None, tenant_id=None, visualise_chunking=False):
     layout_root = None
@@ -133,55 +126,9 @@ def docParser(file_path, st=None, tenant_id=None, visualise_chunking=False):
         # Use chunks from llmsherpa
         # Each chunk is each leaf_node with to_context_text()
         collated_pg_content = [to_context_text(node) for node in leaf_nodes]
+        print("REMOVE:", collated_pg_content[0])
 
         # Convert to Langchain documents
         docs = [LangchainDocument(page_content=collated_pg_content[i], metadata={key: leaf_nodes[i].block_json[key] for key in ('bbox', 'page_idx', 'level')} | {"file_path": file_path}) for i in range(len(collated_pg_content))]
-        
-        if visualise_chunking:
-            # Visualise chunking
-            for doc in docs:
-                draw_bounding_box_on_pdf_image(doc.metadata, colour="green", location=f"chunks/{tenant_id}")
 
     return docs
-
-# Upload files
-def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"], password=config["neo4j_password"]):
-    
-    combined_doc_splits = []
-    for uploaded_file in uploaded_files:
-        doc_path = f"documents/{tenant_id}/{uploaded_file.name}"
-        st.toast(f"Processing {uploaded_file.name}")
-        # check if file exists
-        if not os.path.exists(doc_path):
-            st.error(f"File {uploaded_file.name} does not exist in {doc_path}.")
-            continue
-        doc_splits = docParser(doc_path, st, tenant_id)
-        print(f"Number of splits: {len(doc_splits)}")
-        print("\n")
-        combined_doc_splits.extend(doc_splits)
-
-        #TODO: Perform topic modelling here
-
-    print("Writing to database in index:", tenant_id)
-    try:
-        # stores the parsed documents in the Neo4j database
-        st.toast("Writing to database...")
-        Neo4jVector.from_documents(
-            documents=combined_doc_splits,
-            embedding=embeddings,
-            url=config["neo4j_url"],
-            username=username,
-            password=password,
-            index_name=tenant_id,
-            node_label=tenant_id,
-            keyword_index_name="keyword",
-            search_type="hybrid"
-        )
-        print("Documents written to database")
-        return True
-    except Exception as e:
-        st.error(e.message)
-        st.error(e.args)
-        return False
-
-

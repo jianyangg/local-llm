@@ -28,8 +28,8 @@ class Decision:
                 password=config["neo4j_password"],
                 index_name=tenant_id,
                 node_label=tenant_id,
-                # keyword_index_name="keyword",
-                # search_type="hybrid"
+                keyword_index_name="keyword",
+                search_type="hybrid"
             )
         except Exception as e:
             print("Error:", e)
@@ -42,8 +42,8 @@ class Decision:
                 embedding=embeddings,
                 index_name=tenant_id,
                 node_label=tenant_id,
-                # keyword_index_name="keyword",
-                # search_type="hybrid"
+                keyword_index_name="keyword",
+                search_type="hybrid"
             )
             print(f"Index created for {tenant_id}")
 
@@ -194,9 +194,10 @@ class Decision:
         filtered_docs = []
         relevant_docs = 0
         for d in documents:
+            formatted_string = f"From:{d.metadata['file_path']}: {d.page_content}"
             score = self.custom_llm.retrieval_grader(
                 question,
-                d.page_content,
+                formatted_string,
             )
             ## recall that the score variable holds a json {"score": "yes"}
             print("Score:", score)
@@ -238,7 +239,7 @@ class Decision:
         feedback = state["feedback"]
 
         # process documents stored in the compressed_docs
-        docs = [doc.page_content for doc in documents]
+        docs = ["From" + doc.metadata["file_path"] + ": " + doc.page_content for doc in documents]
         context = "\n\n---\n\n".join(docs)
         limit = 2000
         if len(context) > limit:
@@ -298,7 +299,7 @@ class Decision:
         chat_history = state["chat_history"]
 
         # process documents stored in the compressed_docs
-        docs_content = [doc.page_content for doc in documents]
+        docs_content = ["From" + doc.metadata["file_path"] + ": " + doc.page_content for doc in documents]
         context = "\n\n---\n\n".join(docs_content)
 
         # no relevant documents found.
@@ -393,16 +394,31 @@ class Decision:
         doc_feedback = "Include the following content in your answer:"
         bad_doc_count = 0
         for doc in documents:
-            reply = self.custom_llm.hallucination_grader(
-                generated_answer=generation,
-                documents=doc.page_content
-            )
-            grade = reply["score"]
-            reason = reply["reason"]
+            exit = False
+            limit = 3
+            # This is necessary as LLM does not give fully consistent results (might miss out on certain fields in json)
+            while not exit and limit > 0:
+                try:
+                    reply = self.custom_llm.hallucination_grader(
+                        generated_answer=generation,
+                        documents=doc.page_content
+                    )
+                    exit = True
+                    grade = reply["score"]
+                    reason = reply["reason"]
+                except:
+                    limit -= 1
+
+            if limit == 0:
+                print("Error: Could not get hallucination score.")
+                grade = "no"
+                reason = "Error: Could not get hallucination score."	
+
             if grade == "no":
                 # Answer is not based on this document.
                 doc_feedback += "\n\n" + reason
                 bad_doc_count += 1
+
             # else pass
 
         print(f"Feedback: Answer deviated from {bad_doc_count} documents.")
@@ -433,7 +449,7 @@ class Decision:
         feedback += "\n\n" + answer_feedback if not ans_useful else ""
 
         attempts += 1
-        if attempts > 2:
+        if attempts > 1:
             # If max attempts reached, some documents still not useful but answer is useful
             # Return generation
             if ans_useful:
