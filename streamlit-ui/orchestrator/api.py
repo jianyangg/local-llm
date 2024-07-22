@@ -1,4 +1,4 @@
-from flask import Flask, request, json
+from flask import Flask, request, json, send_file, jsonify
 from pprint import pprint
 from workflow import buildChatApp
 import traceback
@@ -6,6 +6,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.llms import Ollama
 from app_config import config
 from termcolor import cprint
+import os
 
 # This is the only file that receives both inputs and outputs.
 # So it's convenient to store the chat history here.
@@ -95,6 +96,19 @@ def entry_endpoint():
     
     return f"I'm sorry, I'm unable to generate a response at the moment. Please try again later."
 
+@app.route('/topics', methods=['GET'])
+def topics_endpoint():
+    try:
+        # Path to your saved topic model file
+        file_path = "topic_cache"
+
+        if os.path.exists(file_path):
+            return send_file(file_path, as_attachment=True)
+        else:
+            return jsonify({"error": "File not found"}), 404
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5010)
