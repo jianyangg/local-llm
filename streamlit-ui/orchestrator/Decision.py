@@ -6,6 +6,11 @@ from flashrank import Ranker, RerankRequest
 from langchain.docstore.document import Document as LangchainDocument
 from app_config import config
 from termcolor import cprint
+from bertopic import BERTopic
+from sentence_transformers import SentenceTransformer
+from utils import get_chunks_from_query, load_docs_from_jsonl
+import os
+import pickle
 
 class Decision:
     def __init__(self, tenant_id: str):
@@ -50,6 +55,34 @@ class Decision:
         self.retriever = self.vectorstore.as_retriever(search_kwargs={'k': 25, 'fetch_k': 50, 'score_threshold': 0.6})
         self.custom_llm = CustomLLM(tenant_id)
         self.ranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="cache")
+
+        # docs_str: Document chunks page content with stopwords removed
+        docs_str_path = f"documents/{tenant_id}/collated_docs_str_nlp.pkl"
+        if os.path.exists(docs_str_path):
+            with open(docs_str_path, 'rb') as file:
+                self.docs_str = pickle.load(file)
+                print("Loaded docs_str from cache.", len(self.docs_str))
+        else:
+            print("No docs_str found.")
+            self.docs_str = None
+
+        # doc_splits: Document chunks
+        self.docs_splits = []
+        doc_splits_paths = [dir for dir in os.listdir(f"documents/{tenant_id}") if dir.endswith(".jsonl")]
+        doc_splits_paths.sort()
+        for doc_splits_path in doc_splits_paths:
+            print(f"Loading doc_splits from {doc_splits_path}")
+            temp_docs = load_docs_from_jsonl(f"documents/{tenant_id}/{doc_splits_path}")
+            self.docs_splits.extend(temp_docs)
+
+        topic_model_path = f"topic_models_cache/{tenant_id}/topic_model"
+        if os.path.exists(topic_model_path):
+            print("Loading topic model...")
+            self.topic_model = BERTopic.load(topic_model_path, embedding_model=SentenceTransformer("all-MiniLM-L6-v2"))
+            print("Topic model loaded.")
+        else:
+            print("No topic model found.")
+            self.topic_model = None
 
     def initial_routing(self, state: GraphState):
         """
@@ -139,17 +172,19 @@ class Decision:
                 docs.append(LangchainDocument(page_content=passage['text'], metadata=passage['meta']))
             return docs
         
-        # def pretty_print_docs(docs):
-        #     print(
-        #         f"\n{'-' * 100}\n".join(
-        #             [
-        #                 f"Document {i+1}:\n\n{d.page_content}\nMetadata: {d.metadata}"
-        #                 for i, d in enumerate(docs)
-        #             ]
-        #         )
-        #     )
-
+        # Retrieve documents from vector DB
         docs = self.retriever.invoke(question)
+        print("Number of docs retrieved from vector db:", len(docs))
+
+        topic_docs = []
+        # Add documents retrieved from topic model
+        if self.topic_model != None and self.docs_str != None:
+            assert len(self.docs_str) == len(self.docs_splits), "Length of docs_str and docs_splits do not match."
+            topic_docs = get_chunks_from_query(question, self.topic_model, self.docs_str, self.docs_splits)
+            print("Number of docs retrieved from topic model:", len(topic_docs))
+
+        docs.extend(topic_docs)
+
         print("Number of preliminary docs retrieved:", len(docs))
 
         if len(docs) != 0:

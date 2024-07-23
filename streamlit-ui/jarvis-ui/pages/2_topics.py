@@ -1,20 +1,11 @@
-import database_api
 import os
-import requests
 import streamlit as st
 import yaml
 from utils import generate_tenant_id
 from yaml.loader import SafeLoader
-from app_config import config
-from umap import UMAP
-from hdbscan import HDBSCAN
 from sentence_transformers import SentenceTransformer
-from sklearn.feature_extraction.text import CountVectorizer
-
 from bertopic import BERTopic
-from bertopic.representation import KeyBERTInspired
-from bertopic.vectorizers import ClassTfidfTransformer
-
+from utils import load_docs_from_jsonl, run_topic_model
 
 try:
 
@@ -42,31 +33,34 @@ try:
     with open("style.css", "r") as f:
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
-
-    # Perform API call to Orchestrator to retrieve topic_model
-    if st.button("Explore topics"):
-        st.write("Exploring topics...")
-        url = config["orchestrator_url_topics"]
-        response = requests.get(url, stream=True)
-        print(response)
-        if response.status_code == 200:
-            # Save the file in chunks
-            with open("topic_cache", "wb") as f:
-                # for chunk in response.iter_content(chunk_size=4096):  # Adjust chunk_size as needed
-                #     if chunk:
-                #         f.write(chunk)
-                f.write(response.content)
-            st.write("Topic model retrieved successfully.")
-        else:
-            st.write("Error retrieving topic model.")
-
-        
-
-        loaded_model = BERTopic.load("topic_cache", embedding_model=SentenceTransformer("all-MiniLM-L6-v2"))
+    path = f"topic_models_cache/{tenant_id}"
+    if os.path.exists(path) and os.path.exists(f"{path}/topic_model"):
+        button_text = "Regenerate topics"
+        # Show topics
+        loaded_model = BERTopic.load(f"{path}/topic_model", embedding_model=SentenceTransformer("all-MiniLM-L6-v2"))
+        st.subheader("Topics Info")
         st.write(loaded_model.get_topic_info())
-        print(loaded_model.get_topic_info())
+        st.subheader("Visualize Topics")
+        st.write(loaded_model.visualize_topics())
+        # st.link_button("View topic graph", "http://localhost:7475")
+    else:
+        button_text = "Generate topics"
 
+    if st.button(button_text):
+        with st.spinner("Running topic model..."):
+            # Collate all doc splits
+            doc_splits = []
+            # All splits are stored in documents/*.jsonl
+            # doc_count helps with processing the documents in the same order at the orchestrator side
+            doc_count = 0
+            for file in os.listdir(f"documents/{tenant_id}"):
+                if file.endswith(".jsonl"):
+                    doc_splits.extend(load_docs_from_jsonl(f"documents/{tenant_id}/{doc_count}_{file}"))
+                    doc_count += 1
 
+            # Perform topic modelling (implicitly saves topic model)
+            run_topic_model(doc_splits, tenant_id)
+            st.rerun()
 
 except Exception as e:
     print("Actual error:", e)

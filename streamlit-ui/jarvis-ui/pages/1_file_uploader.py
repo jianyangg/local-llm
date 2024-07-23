@@ -34,7 +34,9 @@ try:
     # Display all files in documents folder
     if os.path.exists(f"documents/{tenant_id}"):
         st.write("Files in database:")
-        st.write(os.listdir(f"documents/{tenant_id}"))
+        file_list = os.listdir(f"documents/{tenant_id}")
+        file_list = [f for f in file_list if not f.endswith(".jsonl")]
+        st.write(file_list)
 
     with st.sidebar:
         st.link_button("Database", "http://localhost:7474")

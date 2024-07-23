@@ -5,9 +5,11 @@ from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.vectorstores import Neo4jVector
 from langchain_experimental.text_splitter import SemanticChunker
 from llmsherpa.readers import LayoutPDFReader
-from utils import draw_bounding_box_on_pdf_image
+from utils import draw_bounding_box_on_pdf_image, save_docs_to_jsonl, upload_file
 
 ## Load embeddings
+# TODO: Try using sentence-transformers instead of Ollama
+# embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 embeddings = OllamaEmbeddings(
     base_url=config["ollama_base_url"],	
     model=config["llm_name"]
@@ -145,7 +147,7 @@ def docParser(file_path, st=None, tenant_id=None, visualise_chunking=False):
     return docs
 
 # Upload files
-def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"], password=config["neo4j_password"]):
+def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"], password=config["neo4j_password"], get_topics=False):
     
     combined_doc_splits = []
     for uploaded_file in uploaded_files:
@@ -156,11 +158,19 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
             st.error(f"File {uploaded_file.name} does not exist in {doc_path}.")
             continue
         doc_splits = docParser(doc_path, st, tenant_id)
+
+        jsonl_path = f"documents/{tenant_id}/{uploaded_file.name}.jsonl"
+
+        # Store doc_splits
+        save_docs_to_jsonl(doc_splits, jsonl_path)
+
+        # Upload jsonl file to orchestrator
+        response = upload_file(jsonl_path)
+        print(f"File upload for {upload_file} doc splits response: {response.json()}")
+
         print(f"Number of splits: {len(doc_splits)}")
         print("\n")
         combined_doc_splits.extend(doc_splits)
-
-        #TODO: Perform topic modelling here
 
     print("Writing to database in index:", tenant_id)
     try:

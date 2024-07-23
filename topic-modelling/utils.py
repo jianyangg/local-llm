@@ -132,3 +132,39 @@ def docParser(file_path, st=None, tenant_id=None, visualise_chunking=False):
         docs = [LangchainDocument(page_content=collated_pg_content[i], metadata={key: leaf_nodes[i].block_json[key] for key in ('bbox', 'page_idx', 'level')} | {"file_path": file_path}) for i in range(len(collated_pg_content))]
 
     return docs
+
+# Define some helper functions
+def get_chunks_from_topic(topic_id, topic_model, docs_str, docs):
+    """
+    docs_str - list of strings
+    docs - list of Langchain Document objects
+    """
+    temp = topic_model.get_document_info(docs_str)["Topic"] == topic_id
+    # print(temp)
+    df = topic_model.get_document_info(docs_str)[temp]
+    # get list of all index
+    doc_index = df.index.tolist()
+    return [docs[i] for i in doc_index]
+
+def get_chunks_from_query(query, topic_model, docs_str, docs):
+    topics = topic_model.find_topics(query)
+    print(topics)
+    chunks = []
+    
+    # Select all topics with probability > 0.5
+    for i in range(len(topics[1])):
+        if topics[1][i] > 0.5:
+            print("Topic Chosen:", topics[0][i], "Probability:", topics[1][i])
+            chunks.extend(get_chunks_from_topic(topics[0][i], topic_model, docs_str, docs))
+
+    if len(chunks) > 3:
+        return chunks
+    
+    # If not enough chunks, get the top 3 topics
+    for i in range(len(chunks), 3):
+        print("Getting topic:", i)
+        chunks.extend(get_chunks_from_topic(i, topic_model, docs_str, docs))
+        if len(chunks) > 3:
+            break
+
+    return chunks
