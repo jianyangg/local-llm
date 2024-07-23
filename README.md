@@ -1,5 +1,4 @@
 # local-llm
-DSTA Internship Project
 
 ## Demo (without using Docker Compose)
 
