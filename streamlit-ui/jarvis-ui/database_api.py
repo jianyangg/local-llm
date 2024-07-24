@@ -185,6 +185,10 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
         print("\n")
         combined_doc_splits.extend(doc_splits)
 
+    # Add Source: to each chunk for better context
+    for doc in combined_doc_splits:
+        doc.page_content = f"Source: {doc.metadata['file_path']}\n\n{doc.page_content}"
+
     print("Writing to database in index:", tenant_id)
     try:
         # stores the parsed documents in the Neo4j database
