@@ -35,7 +35,7 @@ try:
     if os.path.exists(f"documents/{tenant_id}"):
         st.write("Files in database:")
         file_list = os.listdir(f"documents/{tenant_id}")
-        file_list = [f for f in file_list if not f.endswith(".jsonl")]
+        file_list = [f for f in file_list if f.endswith(".pdf")]
         st.write(file_list)
 
     with st.sidebar:
@@ -48,8 +48,7 @@ try:
         st.write("Filename:", uploaded_file.name)
 
         # create folder documents if it doesn't exist
-        if not os.path.exists(f"documents/{tenant_id}"):
-            os.makedirs(f"documents/{tenant_id}")
+        os.makedirs(f"documents/{tenant_id}", exist_ok=True)
 
         # save the file in a folder documents if it doesn't exist
         with open(f"documents/{tenant_id}/{uploaded_file.name}", "wb") as f:

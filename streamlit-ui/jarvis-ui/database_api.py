@@ -150,7 +150,18 @@ def docParser(file_path, st=None, tenant_id=None, visualise_chunking=False):
 def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"], password=config["neo4j_password"], get_topics=False):
     
     combined_doc_splits = []
+    existing_files = os.listdir(f"documents/{tenant_id}")
+    # doc_count works as the document id
+    curr_doc_count = max([int(file.split("_")[0]) for file in existing_files if file.endswith(".jsonl")], default=0)
+    print("Current document count:", curr_doc_count)
     for uploaded_file in uploaded_files:
+        # Remove all json files that are in the uploaded_files
+        # The jsonl file has a <number>_<filename>.jsonl format
+        for file in existing_files:
+            if file.endswith(f"{uploaded_file.name}.jsonl") and len(file.split("_")) == len(uploaded_file.name.split("_")) + 1:
+                os.remove(f"documents/{tenant_id}/{file}")
+                print(f"Removed {file}")
+
         doc_path = f"documents/{tenant_id}/{uploaded_file.name}"
         st.toast(f"Processing {uploaded_file.name}")
         # check if file exists
@@ -159,7 +170,9 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
             continue
         doc_splits = docParser(doc_path, st, tenant_id)
 
-        jsonl_path = f"documents/{tenant_id}/{uploaded_file.name}.jsonl"
+        # Save as jsonl
+        jsonl_path = f"documents/{tenant_id}/{curr_doc_count}_{uploaded_file.name}.jsonl"
+        curr_doc_count += 1
 
         # Store doc_splits
         save_docs_to_jsonl(doc_splits, jsonl_path)

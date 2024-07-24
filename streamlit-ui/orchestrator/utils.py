@@ -17,22 +17,28 @@ def get_chunks_from_topic(topic_id, topic_model, docs_str, docs):
 
 def get_chunks_from_query(query, topic_model, docs_str, docs):
     topics = topic_model.find_topics(query)
-    print(topics)
+    print("Result of finding relevant topics to query:", topics)
     chunks = []
-    
-    # Select all topics with probability > 0.5
-    for i in range(len(topics[1])):
-        if topics[1][i] > 0.5:
-            print("Topic Chosen:", topics[0][i], "Probability:", topics[1][i])
-            chunks.extend(get_chunks_from_topic(topics[0][i], topic_model, docs_str, docs))
+    topic_index = -1
 
+    for i in range(len(topics[1])):
+        probs = topics[1][i]
+        # Probabilities are sorted in descending order
+        if probs < 0.5:
+            break
+        print("Topic Chosen:", topics[0][i], "Probability:", topics[1][i])
+        chunks.extend(get_chunks_from_topic(topics[0][i], topic_model, docs_str, docs))
+        topic_index = i
+
+    # We assume that we need at least 3 chunks from our query for topic modelling
     if len(chunks) > 3:
         return chunks
     
-    # If not enough chunks, get the top 3 topics
-    for i in range(len(chunks), 3):
-        print("Getting topic:", i)
-        chunks.extend(get_chunks_from_topic(i, topic_model, docs_str, docs))
+    print("Not enough chunks. Getting additional chunks from less relevant topics.")
+    # Keep iterating through the leftover topics until 
+    for i in range(topic_index+1, len(topics[1])):
+        print("Getting less relevant topic:", topics[0][i], "Probability:", topics[1][i])
+        chunks.extend(get_chunks_from_topic(topics[0][i], topic_model, docs_str, docs))
         if len(chunks) > 3:
             break
 

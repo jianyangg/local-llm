@@ -77,8 +77,10 @@ def entry_endpoint():
             llm = Ollama(model=config["llm_name"], temperature=0, base_url=config["ollama_base_url"])
             # generate title prompt
             prompt=f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-            Generate a 4 word title to categorise the following question and answer pair:
+            You are a title generator.
             <|start_header_id|>user<|end_header_id|>
+            Generate a 4 word title to categorise the following question and answer pair:
+            Leave out any preamble or explanation.
             Question: {prompt}
             Answer: {response}
             <|eot_id|><|start_header_id|>assistant<|end_header_id|>"""

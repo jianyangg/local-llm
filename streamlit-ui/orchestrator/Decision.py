@@ -68,14 +68,18 @@ class Decision:
 
         # doc_splits: Document chunks
         self.docs_splits = []
-        doc_splits_paths = [dir for dir in os.listdir(f"documents/{tenant_id}") if dir.endswith(".jsonl")]
-        doc_splits_paths.sort()
-        for doc_splits_path in doc_splits_paths:
-            print(f"Loading doc_splits from {doc_splits_path}")
-            temp_docs = load_docs_from_jsonl(f"documents/{tenant_id}/{doc_splits_path}")
-            self.docs_splits.extend(temp_docs)
+        if os.path.exists(f"documents/{tenant_id}"):
+            doc_splits_paths = [dir for dir in os.listdir(f"documents/{tenant_id}") if dir.endswith(".jsonl")]
+            doc_splits_paths.sort()
+            for doc_splits_path in doc_splits_paths:
+                print(f"Loading doc_splits from {doc_splits_path}")
+                temp_docs = load_docs_from_jsonl(f"documents/{tenant_id}/{doc_splits_path}")
+                self.docs_splits.extend(temp_docs)
+        else:
+            print("No doc splits found")
+            os.makedirs(f"documents/{tenant_id}", exist_ok=True)
 
-        topic_model_path = f"topic_models_cache/{tenant_id}/topic_model"
+        topic_model_path = f"topic_models_cache/{tenant_id}/topic_model.pkl"
         if os.path.exists(topic_model_path):
             print("Loading topic model...")
             self.topic_model = BERTopic.load(topic_model_path, embedding_model=SentenceTransformer("all-MiniLM-L6-v2"))
@@ -153,6 +157,7 @@ class Decision:
         print("Retrieving documents...")
         # get the question from the state which is a child of GraphState
         question = state["question"]
+        qn_for_retrieval = state["qn_for_retrieval"]
 
         def docs_to_passages(docs):
             idx = 0
@@ -173,15 +178,17 @@ class Decision:
             return docs
         
         # Retrieve documents from vector DB
-        docs = self.retriever.invoke(question)
+        docs = self.retriever.invoke(qn_for_retrieval)
         print("Number of docs retrieved from vector db:", len(docs))
+        cprint(f"\nExample doc from vectorstore: {docs[0] if len(docs) > 0 else 'No docs'}\n", "green")
 
         topic_docs = []
         # Add documents retrieved from topic model
         if self.topic_model != None and self.docs_str != None:
             assert len(self.docs_str) == len(self.docs_splits), "Length of docs_str and docs_splits do not match."
-            topic_docs = get_chunks_from_query(question, self.topic_model, self.docs_str, self.docs_splits)
+            topic_docs = get_chunks_from_query(qn_for_retrieval, self.topic_model, self.docs_str, self.docs_splits)
             print("Number of docs retrieved from topic model:", len(topic_docs))
+            cprint(f"\nExample doc from topic_model: {topic_docs[0]}\n", "green")
 
         docs.extend(topic_docs)
 
@@ -192,14 +199,14 @@ class Decision:
             rerankrequest = RerankRequest(query=question, passages=docs_to_passages(docs))
             ranked_passages = self.ranker.rerank(rerankrequest)
 
-            print("No. of reranked docs:", len(ranked_passages))
             # Exclude scores below 0.8
-            filtered_ranked_passages = [doc for doc in ranked_passages if doc['score'] >= 0.8]
-            # If query isn't specific enough, the score will be very low. In this case, we can use the top 5 docs.
-            filtered_ranked_passages = filtered_ranked_passages if len(filtered_ranked_passages) > 3 else ranked_passages[:10]
-            print("No. of filtered ranked passages:", len(filtered_ranked_passages))
+            # Get top_n number of docs
+            top_n = 15
+            # sort ranked_passages by score
+            sorted_ranked_passages = sorted(ranked_passages, key=lambda x: x['score'], reverse=True)
+            filtered_ranked_passages = sorted_ranked_passages[:top_n]
             final_docs = passages_to_langchainDocument(filtered_ranked_passages)
-
+            cprint(f"\nExample doc from reranker: {final_docs[0] if len(final_docs) > 0 else 'No docs'}\n", "green")
             print(f"No. of final documents retrieved: {len(final_docs)}")
             # pretty_print_docs(final_docs)
         else:
@@ -407,7 +414,7 @@ class Decision:
         question = state["question"]
         chat_history = state["chat_history"]
         rephrased_question = self.custom_llm.rephraser(question, chat_history)
-        return {"question": rephrased_question, "chat_history": chat_history}
+        return {"question": question, "chat_history": chat_history, "qn_for_retrieval": rephrased_question}
     
 
     def give_feedback(self, state):
@@ -495,7 +502,7 @@ class Decision:
                 # Max number of retries reached
                 # Suggests the loop does not produce meaningful results
                 # Return generation 
-                generation = "_I'm sorry, I'm unable to generate a meaningful response. However, see below for my attempt._\n\n" + generation
+                generation = "_I'm not confident in this answer, but here's my attempt._\n\n" + generation
                 return {"generation": generation, "verdict": "completed", "documents": documents}
 
 

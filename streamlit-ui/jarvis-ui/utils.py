@@ -19,7 +19,9 @@ from langchain_community.llms import Ollama
 from app_config import config
 import requests
 import pickle
-from pprint import pprint
+import networkx as nx
+import json
+import pandas as pd
 
 llm = Ollama(model="llama3:instruct", temperature=0, base_url=config["ollama_base_url"], verbose=False)
 
@@ -85,6 +87,7 @@ def run_topic_model(docs, tenant_id):
     # Might have some issues loading stopwords in Docker
     # nltk.download('stopwords')
 
+    print("Running topic model...")
     # Remove stop words
     docs_str = []
     stop_words = set(stopwords.words('english'))
@@ -100,6 +103,7 @@ def run_topic_model(docs, tenant_id):
         docs_str.append(filtered_text)
 
     # Save docs_str in a jsonl file
+    print("Saving collated docs_str...")
     docs_str_path = f"documents/{tenant_id}/collated_docs_str_nlp.pkl"
     with open(docs_str_path, 'wb') as file:
         pickle.dump(docs_str, file)
@@ -141,57 +145,35 @@ def run_topic_model(docs, tenant_id):
     )
 
     topics, _ = topic_model.fit_transform(docs_str)
+    unique_topics = set(topics)
 
     # Generate topic name
     topic_name = {}
     for i in range(len(topic_model.get_topic_info())):
         rep_words = topic_model.get_topic_info()["Representation"][i]
-        topic_name[i-1] = llm.invoke(f"Generate a 2 to 3 word TOPIC NAME from the words it's represented by: ({rep_words[:4]}). IMPORTANT: EXCLUDE ANY PREAMBLE OR EXPLANATION.")
+        gen_llm_topic_name = llm.invoke(f"Generate a 2 to 3 word TOPIC NAME from the words it's represented by: ({rep_words[:4]}). IMPORTANT: EXCLUDE ANY PREAMBLE OR EXPLANATION.")
+        topic_name[i+min(unique_topics)] = gen_llm_topic_name
 
     topic_model.set_topic_labels(topic_name)
 
     # Make directory if it doesn't exist
-    path = f"topic_models_cache/{tenant_id}/topic_model.pkl"
-    if not os.path.exists(path):
-        os.makedirs(path)
+    dir_path = f"topic_models_cache/{tenant_id}"
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
 
-    topic_model.save(path, serialization="pickle", save_embedding_model=False, save_ctfidf=True)
+    pickle_path = dir_path + "/topic_model.pkl"
 
-    # Upload topic model
-    response = upload_file(path)
+    topic_model.save(pickle_path, serialization="pickle", save_embedding_model=False, save_ctfidf=True)
+
+    # Upload topic model to orchestrator
+    response = upload_file(pickle_path)
     print(f"File upload for topic model response: {response.json()}")
 
+    # Generate and save network graph for the topics
+    generate_network_graph(topic_model, topic_name, docs, docs_str, tenant_id)
 
-    # For plotting of topic-knowledge graph to neo4j
-    # uri = "neo4j://localhost:7688"
-    # with GraphDatabase.driver(uri, auth=("neo4j", "password")) as driver:
-    #     # Clear database
-    #     driver.execute_query("MATCH (n) DETACH DELETE n")
-    #     # Add all topics
-    #     for topic in topic_name:
-    #         driver.execute_query(f"CREATE (t:Topic {{name: '{topic_name[topic]}', id: '{topic}'}})")
-    #     # Add all documents
-    #     doc_path = [doc.metadata['file_path'].split("/")[-1] for doc in docs]
-    #     set_doc_path = set(doc_path)
-    #     for doc in set_doc_path:
-    #         driver.execute_query(f"CREATE (d:Document {{name: '{doc}'}})")
-    #     # Add all document chunks
-    #     for i, doc in enumerate(docs):
-    #         driver.execute_query(f"CREATE (c:Chunk {{id: 'chunk_{i}', text: '{doc.page_content}', name: '{doc.metadata['file_path']}', topic: '{topic_model.get_document_info(docs_str)['Topic'][i]}'}})")
-    #     # Add relationships between documents and chunks
-    #     for i, doc in enumerate(docs):
-    #         driver.execute_query(f"MATCH (d:Document {{name: '{doc.metadata['file_path'].split('/')[-1]}'}}), (c:Chunk {{id: 'chunk_{i}'}}) CREATE (d)-[:HAS_CHUNK]->(c)")
-    #         # Add relationships between chunks and topics
-    #         driver.execute_query(f"MATCH (c:Chunk {{id: 'chunk_{i}'}}), (t:Topic {{id: '{topic_model.get_document_info(docs_str)['Topic'][i]}'}}) CREATE (c)-[:HAS_TOPIC]->(t)")
-    #     # Add direct link between documents and topics
-    #     for doc_path in set_doc_path:
-    #         # Each main doc has multiple topics associated with it
-    #         # Find all topics associated with the doc
-    #         chunks = [doc for doc in docs if doc.metadata['file_path'].split('/')[-1] == doc_path]
-    #         topics = [topic_model.get_document_info(docs_str)['Topic'][docs.index(chunk)] for chunk in chunks]
-    #         set_topics = set(topics)
-    #         for topic in set_topics:
-    #             driver.execute_query(f"MATCH (d:Document {{name: '{doc_path}'}}), (t:Topic {{id: '{topic}'}}) CREATE (d)-[:HAS_TOPIC]->(t)")
+    # Save Topic Info Table
+    save_topic_info_table(topic_model, tenant_id, docs, docs_str)
 
 def upload_file(path):
     url = config["orchestrator_url_upload_file"]
@@ -216,3 +198,124 @@ def load_docs_from_jsonl(file_path)->Iterable[Document]:
             array.append(obj)
     return array
 
+def generate_network_graph(topic_model, topic_name, docs, docs_str, tenant_id):
+    # Extracting data from the topic model and storing it in a dictionary
+    topic_info = topic_model.get_topic_info()
+    data = {
+        'Topic': list(topic_info['Topic']),
+        'Count': list(topic_info['Count']),
+        'Name': topic_name.values(),
+        'Top4Words': [rep[:4] for rep in topic_info['Representation']]
+    }
+
+    # # Printing the data for verification
+    # print(data)
+
+    # Creating a DataFrame from the data
+    df = pd.DataFrame(data)
+
+    # Creating a graph using NetworkX
+    G = nx.DiGraph()
+
+    ### NODES
+    ## Topic nodes
+    # Creating a list of nodes with their attributes
+    topic_node_data = [
+        (f"[TOPIC]\n{row['Name']}", {
+            'size': max(row['Count'], 6),
+            'color': "#c2950e"
+        }) for row in df.to_dict('records')
+    ]
+
+    # # Printing the node data for verification
+    # print(topic_node_data)
+
+    ## Representation nodes
+    rep_node_data = []
+    for i in range(len(df)):
+        rep_node_data.append((f"[REP_WORDS]\n{df['Top4Words'][i]}", {
+            'size': 8,
+            'color': "#808080",
+        }))
+
+    print(rep_node_data)
+
+    ## Document nodes
+    doc_path = [doc.metadata['file_path'].split("/")[-1] for doc in docs]
+    set_doc_path = set(doc_path)
+    doc_node_data = []
+    for doc in set_doc_path:
+        doc_node_data.append((f"[DOC]\n{doc}", {
+            'size': 2/3 * max(df['Count']),
+            'color': "#000000"
+        }))
+
+    # Collate all nodes
+    node_data = []
+    node_data.extend(topic_node_data)
+    node_data.extend(rep_node_data)
+    node_data.extend(doc_node_data)
+
+    # Adding nodes to the graph
+    G.add_nodes_from(node_data)
+
+
+    ### EDGES
+    ## Document to Topics
+    for doc_path in set_doc_path:
+        # Each main doc has multiple topics associated with it
+        # Find all topics associated with the doc
+        chunks = [doc for doc in docs if doc.metadata['file_path'].split('/')[-1] == doc_path]
+        topics = [topic_model.get_document_info(docs_str)['Topic'][docs.index(chunk)] for chunk in chunks]
+        set_topics = set(topics)
+        for topic in set_topics:
+            G.add_edge(f"[DOC]\n{doc_path}", f"[TOPIC]\n{topic_name[topic]}", label="HAS_TOPIC", weight=2)
+
+    ## Topics to Representation
+    for i in range(len(df)):
+        G.add_edge(f"[TOPIC]\n{df['Name'][i]}", f"[REP_WORDS]\n{df['Top4Words'][i]}", label="HAS_WORDS", weight=2)
+
+    # Converting the graph to JSON format
+    graph_data = nx.node_link_data(G)
+
+    # Saving the graph data to a JSON file
+    with open(f"topic_models_cache/{tenant_id}/graph.json", "w") as f:
+        json.dump(graph_data, f)
+
+def save_topic_info_table(topic_model, tenant_id, docs, docs_str):
+    # Save topic table as cache
+    df_copy = topic_model.get_topic_info()[["Topic", "CustomName", "Representation", "Count", "Representative_Docs"]].copy(deep=True)
+
+    # Find a mapping from each topic to the Documents in the topic
+    topic_to_docs = {}
+    doc_path = [doc.metadata['file_path'].split("/")[-1] for doc in docs]
+    set_doc_path = set(doc_path)
+    for path in set_doc_path:
+        # Each main doc has multiple topics associated with it
+        # Find all topics associated with the doc
+        chunks = [doc for doc in docs if doc.metadata['file_path'].split('/')[-1] == path]
+        topics = [topic_model.get_document_info(docs_str)['Topic'][docs.index(chunk)] for chunk in chunks]
+        set_topics = set(topics)
+        print(set_topics)
+        for topic in set_topics:
+            if topic not in topic_to_docs:
+                topic_to_docs[topic] = []
+            topic_to_docs[topic].append(path)
+
+    # Format each value such that it's a string
+    for topic in topic_to_docs:
+        topic_to_docs[topic] = ", ".join(topic_to_docs[topic])
+
+    # Format Representation
+    df_copy["Representation"] = df_copy["Representation"].apply(lambda x: ", ".join(x))
+
+    # Add Doc to df_copy
+    df_copy["Documents"] = df_copy["Topic"].map(topic_to_docs)
+
+    # rename column CustomName to Name
+    df_copy.rename(columns={"Topic": "Topic ID", "CustomName": "Topic", "Representation": "Key Words in Topic", "Count": "No. of Docs", "Representative_Docs": "Key Chunks in Topic"}, inplace=True)
+
+    df_copy.set_index("Topic", inplace=True)
+
+    # Save the table as a pickle file
+    df_copy.to_pickle(f"topic_models_cache/{tenant_id}/topic_info_table.pkl")
