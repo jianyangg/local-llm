@@ -27,60 +27,16 @@ try:
         st.error(f"Error: {e}")
 
     tenant_id = generate_tenant_id(username, hashed_password)
-
-    # Custom CSS for better styling
-    st.markdown("""
-        <style>
-        .stChatInput {
-            margin-bottom: 3px;
-        }
-        .stChatInput input {
-            font-size: 16px;
-            padding: 15px;
-            border-radius: 15px;
-            border: 1px solid #ccc;
-            width: 10%;
-        }
-        .stChatInput input::placeholder {
-            color: #888;
-        }
-        .stButton button {
-            background-color: #003153;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            padding: 10px 20px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 16px;
-            margin: 4px 2px;
-            cursor: pointer;
-        }
-        .user-message {
-            text-align: left;
-            background-color: #003153;
-            color: white;
-            padding: 10px 10px 10px 15px;
-            border-radius: 15px;
-            margin: 10px 3px 10px auto;
-            max-width: 50%;
-        }
-        .assistant-message {
-            text-align: left;
-            background-color: #f1f0f0;
-            padding: 10px 10px 10px 15px;
-            border-radius: 15px;
-            margin: 10px auto 10px 3px;
-            max-width: 70%;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+    
+    with open("style.css", "r") as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
     # Display all files in documents folder
     if os.path.exists(f"documents/{tenant_id}"):
         st.write("Files in database:")
-        st.write(os.listdir(f"documents/{tenant_id}"))
+        file_list = os.listdir(f"documents/{tenant_id}")
+        file_list = [f for f in file_list if f.endswith(".pdf")]
+        st.write(file_list)
 
     with st.sidebar:
         st.link_button("Database", "http://localhost:7474")
@@ -92,8 +48,7 @@ try:
         st.write("Filename:", uploaded_file.name)
 
         # create folder documents if it doesn't exist
-        if not os.path.exists(f"documents/{tenant_id}"):
-            os.makedirs(f"documents/{tenant_id}")
+        os.makedirs(f"documents/{tenant_id}", exist_ok=True)
 
         # save the file in a folder documents if it doesn't exist
         with open(f"documents/{tenant_id}/{uploaded_file.name}", "wb") as f:
@@ -120,5 +75,5 @@ try:
 
 except Exception as e:
     print("Actual error:", e)
-    st.error("Please sign in from the Home page and try again.")
+    st.error(f"Please sign in from the Home page and try again. Error: {e}")
     st.stop()

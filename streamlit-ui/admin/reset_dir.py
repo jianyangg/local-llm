@@ -1,6 +1,7 @@
 # Useful to reset directories when uploading so that we can start off from a clean slate
 
 import os
+from termcolor import cprint
 
 # Directories to clean: Documents, Chat History, Output, Chunks
 def reset_directories():
@@ -31,9 +32,10 @@ def reset_directories():
                         os.rmdir(file_path)
                 except Exception as e:
                     print(f"Error deleting {file_path}: {e}")
+                cprint(f"Deleted {file_path}", "red")
         else:
             print(f"Directory {path_to_dir} does not exist.")
 
 if __name__ == "__main__":
     reset_directories()
-    print("Directories reset.")
+    cprint("Directories reset.", "green")

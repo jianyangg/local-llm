@@ -6,6 +6,11 @@ from flashrank import Ranker, RerankRequest
 from langchain.docstore.document import Document as LangchainDocument
 from app_config import config
 from termcolor import cprint
+from bertopic import BERTopic
+from sentence_transformers import SentenceTransformer
+from utils import get_chunks_from_query, load_docs_from_jsonl
+import os
+import pickle
 
 class Decision:
     def __init__(self, tenant_id: str):
@@ -28,8 +33,8 @@ class Decision:
                 password=config["neo4j_password"],
                 index_name=tenant_id,
                 node_label=tenant_id,
-                # keyword_index_name="keyword",
-                # search_type="hybrid"
+                keyword_index_name="keyword",
+                search_type="hybrid"
             )
         except Exception as e:
             print("Error:", e)
@@ -42,14 +47,46 @@ class Decision:
                 embedding=embeddings,
                 index_name=tenant_id,
                 node_label=tenant_id,
-                # keyword_index_name="keyword",
-                # search_type="hybrid"
+                keyword_index_name="keyword",
+                search_type="hybrid"
             )
             print(f"Index created for {tenant_id}")
 
         self.retriever = self.vectorstore.as_retriever(search_kwargs={'k': 25, 'fetch_k': 50, 'score_threshold': 0.6})
         self.custom_llm = CustomLLM(tenant_id)
         self.ranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="cache")
+
+        # docs_str: Document chunks page content with stopwords removed
+        docs_str_path = f"documents/{tenant_id}/collated_docs_str_nlp.pkl"
+        if os.path.exists(docs_str_path):
+            with open(docs_str_path, 'rb') as file:
+                self.docs_str = pickle.load(file)
+                print("Loaded docs_str from cache.", len(self.docs_str))
+        else:
+            print("No docs_str found.")
+            self.docs_str = None
+
+        # doc_splits: Document chunks
+        self.docs_splits = []
+        if os.path.exists(f"documents/{tenant_id}"):
+            doc_splits_paths = [dir for dir in os.listdir(f"documents/{tenant_id}") if dir.endswith(".jsonl")]
+            doc_splits_paths.sort()
+            for doc_splits_path in doc_splits_paths:
+                print(f"Loading doc_splits from {doc_splits_path}")
+                temp_docs = load_docs_from_jsonl(f"documents/{tenant_id}/{doc_splits_path}")
+                self.docs_splits.extend(temp_docs)
+        else:
+            print("No doc splits found")
+            os.makedirs(f"documents/{tenant_id}", exist_ok=True)
+
+        topic_model_path = f"topic_models_cache/{tenant_id}/topic_model.pkl"
+        if os.path.exists(topic_model_path):
+            print("Loading topic model...")
+            self.topic_model = BERTopic.load(topic_model_path, embedding_model=SentenceTransformer("all-MiniLM-L6-v2"))
+            print("Topic model loaded.")
+        else:
+            print("No topic model found.")
+            self.topic_model = None
 
     def initial_routing(self, state: GraphState):
         """
@@ -120,6 +157,7 @@ class Decision:
         print("Retrieving documents...")
         # get the question from the state which is a child of GraphState
         question = state["question"]
+        qn_for_retrieval = state["qn_for_retrieval"]
 
         def docs_to_passages(docs):
             idx = 0
@@ -139,17 +177,21 @@ class Decision:
                 docs.append(LangchainDocument(page_content=passage['text'], metadata=passage['meta']))
             return docs
         
-        # def pretty_print_docs(docs):
-        #     print(
-        #         f"\n{'-' * 100}\n".join(
-        #             [
-        #                 f"Document {i+1}:\n\n{d.page_content}\nMetadata: {d.metadata}"
-        #                 for i, d in enumerate(docs)
-        #             ]
-        #         )
-        #     )
+        # Retrieve documents from vector DB
+        docs = self.retriever.invoke(qn_for_retrieval)
+        print("Number of docs retrieved from vector db:", len(docs))
+        cprint(f"\nExample doc from vectorstore: {docs[0] if len(docs) > 0 else 'No docs'}\n", "green")
 
-        docs = self.retriever.invoke(question)
+        topic_docs = []
+        # Add documents retrieved from topic model
+        if self.topic_model != None and self.docs_str != None:
+            assert len(self.docs_str) == len(self.docs_splits), "Length of docs_str and docs_splits do not match."
+            topic_docs = get_chunks_from_query(qn_for_retrieval, self.topic_model, self.docs_str, self.docs_splits)
+            print("Number of docs retrieved from topic model:", len(topic_docs))
+            cprint(f"\nExample doc from topic_model: {topic_docs[0]}\n", "green")
+
+        docs.extend(topic_docs)
+
         print("Number of preliminary docs retrieved:", len(docs))
 
         if len(docs) != 0:
@@ -157,14 +199,14 @@ class Decision:
             rerankrequest = RerankRequest(query=question, passages=docs_to_passages(docs))
             ranked_passages = self.ranker.rerank(rerankrequest)
 
-            print("No. of reranked docs:", len(ranked_passages))
             # Exclude scores below 0.8
-            filtered_ranked_passages = [doc for doc in ranked_passages if doc['score'] >= 0.8]
-            # If query isn't specific enough, the score will be very low. In this case, we can use the top 5 docs.
-            filtered_ranked_passages = filtered_ranked_passages if len(filtered_ranked_passages) > 3 else ranked_passages[:10]
-            print("No. of filtered ranked passages:", len(filtered_ranked_passages))
+            # Get top_n number of docs
+            top_n = 15
+            # sort ranked_passages by score
+            sorted_ranked_passages = sorted(ranked_passages, key=lambda x: x['score'], reverse=True)
+            filtered_ranked_passages = sorted_ranked_passages[:top_n]
             final_docs = passages_to_langchainDocument(filtered_ranked_passages)
-
+            cprint(f"\nExample doc from reranker: {final_docs[0] if len(final_docs) > 0 else 'No docs'}\n", "green")
             print(f"No. of final documents retrieved: {len(final_docs)}")
             # pretty_print_docs(final_docs)
         else:
@@ -194,9 +236,10 @@ class Decision:
         filtered_docs = []
         relevant_docs = 0
         for d in documents:
+            formatted_string = f"From:{d.metadata['file_path']}: {d.page_content}"
             score = self.custom_llm.retrieval_grader(
                 question,
-                d.page_content,
+                formatted_string,
             )
             ## recall that the score variable holds a json {"score": "yes"}
             print("Score:", score)
@@ -238,7 +281,7 @@ class Decision:
         feedback = state["feedback"]
 
         # process documents stored in the compressed_docs
-        docs = [doc.page_content for doc in documents]
+        docs = ["From" + doc.metadata["file_path"] + ": " + doc.page_content for doc in documents]
         context = "\n\n---\n\n".join(docs)
         limit = 2000
         if len(context) > limit:
@@ -298,7 +341,7 @@ class Decision:
         chat_history = state["chat_history"]
 
         # process documents stored in the compressed_docs
-        docs_content = [doc.page_content for doc in documents]
+        docs_content = ["From" + doc.metadata["file_path"] + ": " + doc.page_content for doc in documents]
         context = "\n\n---\n\n".join(docs_content)
 
         # no relevant documents found.
@@ -371,7 +414,7 @@ class Decision:
         question = state["question"]
         chat_history = state["chat_history"]
         rephrased_question = self.custom_llm.rephraser(question, chat_history)
-        return {"question": rephrased_question, "chat_history": chat_history}
+        return {"question": question, "chat_history": chat_history, "qn_for_retrieval": rephrased_question}
     
 
     def give_feedback(self, state):
@@ -393,16 +436,31 @@ class Decision:
         doc_feedback = "Include the following content in your answer:"
         bad_doc_count = 0
         for doc in documents:
-            reply = self.custom_llm.hallucination_grader(
-                generated_answer=generation,
-                documents=doc.page_content
-            )
-            grade = reply["score"]
-            reason = reply["reason"]
+            exit = False
+            limit = 3
+            # This is necessary as LLM does not give fully consistent results (might miss out on certain fields in json)
+            while not exit and limit > 0:
+                try:
+                    reply = self.custom_llm.hallucination_grader(
+                        generated_answer=generation,
+                        documents=doc.page_content
+                    )
+                    exit = True
+                    grade = reply["score"]
+                    reason = reply["reason"]
+                except:
+                    limit -= 1
+
+            if limit == 0:
+                print("Error: Could not get hallucination score.")
+                grade = "no"
+                reason = "Error: Could not get hallucination score."	
+
             if grade == "no":
                 # Answer is not based on this document.
                 doc_feedback += "\n\n" + reason
                 bad_doc_count += 1
+
             # else pass
 
         print(f"Feedback: Answer deviated from {bad_doc_count} documents.")
@@ -433,7 +491,7 @@ class Decision:
         feedback += "\n\n" + answer_feedback if not ans_useful else ""
 
         attempts += 1
-        if attempts > 2:
+        if attempts > 1:
             # If max attempts reached, some documents still not useful but answer is useful
             # Return generation
             if ans_useful:
@@ -444,7 +502,7 @@ class Decision:
                 # Max number of retries reached
                 # Suggests the loop does not produce meaningful results
                 # Return generation 
-                generation = "_I'm sorry, I'm unable to generate a meaningful response. However, see below for my attempt._\n\n" + generation
+                generation = "_I'm not confident in this answer, but here's my attempt._\n\n" + generation
                 return {"generation": generation, "verdict": "completed", "documents": documents}
 
 

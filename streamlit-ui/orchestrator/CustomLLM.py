@@ -17,30 +17,40 @@ class CustomLLM:
         self.llm = Ollama(model=config["llm_name"], temperature=0, base_url=config["ollama_base_url"], verbose=False)
         self.tenant_id = tenant_id
         chat_hist_summariser_prompt = PromptTemplate(
-            template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-            You are a summarizer tasked with collating what ONE party has said.
-            You are to provide a brief overview of the content.
-            The summary should be concise and capture the key points of the content.
-            Return the summary with no preamble or explanation.
-            If there's nothing to summarise, return an empty string.
-            YOU HAVE NO PERSONALITY and YOURE JUST A TOOL. DO NOT REPLY TO THE USER, JUST DO YOUR JOB.
+            template="""
+            <|begin_of_text|>
+            <|start_header_id|>system<|end_header_id|>
+            You are a summarizer focused on extracting and condensing the statements made by a single designated party within a chat conversation.
             <|start_header_id|>user<|end_header_id|>
+            Your goal is to:
+
+            1. Extract the core ideas and information from the content provided.
+            2. Synthesize a concise summary of the content.
+
+            Crucial Instructions:
+
+            * Your response should ONLY be the summary; do not include any introductory phrases or explanations.
+            * Prioritize brevity and focus on the most salient points.
+            * Avoid adding your own interpretations or opinions.
+
             Content: {chat_history}
-            DO NOT BE VERBOSE. BE VERY CONCISE.
-            <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+            If there's no chat history, return an empty string.
+            Important! Leave out any preamble or explanation or apologies. <|eot_id|>
+            <|start_header_id|>assistant<|end_header_id|>""",
             input_variables=["chat_history"],
         )
         self.chat_hist_summariser = chat_hist_summariser_prompt | self.llm | self.str_parser
-    
-    def get_summarised_prev_ans(self, prev_ans: str):
-        summarised_prev_ans = self.llm.invoke(f"Summarise and be concise: {prev_ans}")
-        return summarised_prev_ans
 
     def get_summarised_chat_hist(self, chat_history: list):
         # Separetely summarise the chat history for human and AI messages
         human_convo_hist_list = [msg.content for idx, msg in enumerate(chat_history) if idx % 2 == 0]
+        print("Length of convo hist (human):", len(human_convo_hist_list))
         human_convo_hist = " ".join(human_convo_hist_list)
         ai_convo_hist_list = [msg.content for idx, msg in enumerate(chat_history) if idx % 2 == 1]
+        print("Length of convo hist (AI):", len(ai_convo_hist_list))
+        if len(ai_convo_hist_list) == 0:
+            # The first run don't need chat history
+            return [HumanMessage(content=""), AIMessage(content="")]
         ai_convo_hist = " ".join(ai_convo_hist_list)
         summarised_human_hist = self.chat_hist_summariser.invoke({"chat_history": human_convo_hist})
         summarised_ai_hist = self.chat_hist_summariser.invoke({"chat_history": ai_convo_hist})
@@ -61,18 +71,19 @@ class CustomLLM:
 
         routing_prompt = PromptTemplate(
             # Template for llama3
-            template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+            template="""
+            <|begin_of_text|>
+            <|start_header_id|>system<|end_header_id|>
             You are an expert at deciding whether a question
             requires the retrieval of information from a vectorstore before generating a response or to go straight to generating a response.
-            Generic questions that can be answered without data are not worth
-            routing to the vectorstore and should be answered directly through generation.
-            If questions refer you to a knowledge base or a data source, you should route the question to the 'vectorstore'. Otherwise, you should
-            reply 'generate' to answer the question directly.
+            Generic questions that can be answered without data should be answered directly through generation so 'generate'.
+            If questions refer you to a knowledge base or a data source or might be supplemented with documents in knowledge base,
+            you should route the question to the 'vectorstore'.
             If the question DOES NOT hint at the use of your knowledge base, you should route the question to 'generate'.
+            <|start_header_id|>user<|end_header_id|>
             Give a binary choice of 'generate' if question requires NO reference to the datasource, and 'vectorstore' if it does.
             Return a JSON with a single key 'datasource' and 
             no preamble or explanation.
-            <|start_header_id|>user<|end_header_id|>
             Question to route: {question}
             <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
 
@@ -97,14 +108,16 @@ class CustomLLM:
 
         doc_grader_prompt = PromptTemplate(
             # Template for llama3
-            template="""<|begin_of_text|>
+            template="""
+            <|begin_of_text|>
             <|start_header_id|>system<|end_header_id|>
             You are a grader assessing relevance 
-            of a retrieved document to a user question. If the document contains keywords related to the user question, 
-            grade it as relevant. It does not need to be a stringent test. The goal is to filter out erroneous retrievals. \n
-            Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question. \n
-            Provide the binary score as a JSON with a single key 'score' and no premable or explanation.
+            of a retrieved document to a user question.
             <|eot_id|><|start_header_id|>user<|end_header_id|>
+            Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question. \n
+            If the document contains keywords related to the user question, 
+            grade it as relevant. It does not need to be a stringent test. The goal is to filter out erroneous retrievals. \n
+            Provide the binary score as a JSON with a single key 'score' and no premable or explanation.
             Here is the retrieved document: \n\n {document} \n\n
             Here is the user question: {question} \n
             <|eot_id|><|start_header_id|>assistant<|end_header_id|>
@@ -142,9 +155,9 @@ class CustomLLM:
                     <|start_header_id|>system<|end_header_id|>
                     You are called a DSTA Chatbot called Jarvis.
                     You are to be helpful, friendly, and professional.
+                    <|start_header_id|>user<|end_header_id|>
                     You are given a query and a set of documents.
                     Answer the query based on the documents and the chat history provided below.
-                    <|start_header_id|>user<|end_header_id|>
                     ONLY REFERENCE THE CHAT HISTORY IF IT HELPS YOU ANSWER THE QUESTION.
                     Chat History:
                     """
@@ -156,14 +169,13 @@ class CustomLLM:
                     Answer this question: {query}
                     Documents to reference: {documents}
                     Your task is to provide a detailed and well-structured answer based on the documents provided.
-                    The documents have all been pre-processed and are determined by your overlords to be relevant to the query -- do not second-guess them.
                     Please ensure that your answer is clear, concise, and divided into the following sections:
-                    1. **Introduction**: Briefly summarize the query and the context.
+                    1. **Introduction**: Briefly summarize the context and your answer.
                     2. **Key Information from Documents**: Highlight the most relevant information from the documents that directly addresses the query.
                     3. **Detailed Answer**: Provide a thorough and detailed answer to the query, integrating information from the documents.
                     4. **Conclusion**: Summarize the key points and provide any additional insights or recommendations if relevant.
-                    Remember to keep your answers concise and structured.
-                    <|eot_id|><|start_header_id|>assistant<|end_header_id|>
+                    Remember to keep your answers concise and structured.<|eot_id|>
+                    <|start_header_id|>assistant<|end_header_id|>
                     """
                 )
             ]
@@ -178,7 +190,8 @@ class CustomLLM:
                     <|start_header_id|>system<|end_header_id|>
                     You are a highly knowledgeable and structured Retrieval QA model. You are given a query and a set of documents.
                     <|start_header_id|>user<|end_header_id|>
-                    ONLY REFERENCE THE CHAT HISTORY IF IT HELPS YOU ANSWER THE QUESTION.
+                    Your task is to EDIT THE FOLLOWING ANSWER BASED ON THE PROVIDED FEEDBACK
+                    MINIMISE EDITS TO THE ANSWER. SLIGHT MODIFICATIONS BASED ON THE FEEDBACK ONLY.
                     Chat History:
                     """
                 ),
@@ -186,17 +199,19 @@ class CustomLLM:
                 (
                     "human",
                     """
+                    Query: {query}
                     Feedback: {feedback}
-                    Your task is to EDIT THE FOLLOWING ANSWER BASED ON THE PROVIDED FEEDBACK
-                    MINIMISE EDITS TO THE ANSWER. SLIGHT MODIFICATIONS BASED ON THE FEEDBACK ONLY.
-                    Answer to be improved: {prev_ans}
+                    Documents to reference: {documents}
+                    
                     Please ensure that your answer is clear, concise, and divided into the following sections:
-                    1. **Introduction**: Briefly summarize the query and the context.
+                    1. **Introduction**: Briefly summarize the context and your answer.
                     2. **Key Information from Documents**: Highlight the most relevant information from the documents that directly addresses the query.
                     3. **Detailed Answer**: Provide a thorough and detailed answer to the query, integrating information from the documents.
                     4. **Conclusion**: Summarize the key points and provide any additional insights or recommendations if relevant.
                     Remember to keep your answers concise and structured.
-                    <|eot_id|><|start_header_id|>assistant<|end_header_id|>
+                    ONLY REFERENCE THE CHAT HISTORY IF IT HELPS YOU ANSWER THE QUESTION.
+                    IMPORTANT! Exclude any mention of having received feedback.<|eot_id|>
+                    <|start_header_id|>assistant<|end_header_id|>
                     """
                 )
             ]
@@ -206,7 +221,7 @@ class CustomLLM:
         cprint("Running history summariser", "yellow")
         summarised_chat_history = self.get_summarised_chat_hist(chat_history)
         cprint(f"Summarised chat history: {summarised_chat_history}", "yellow")
-        generated_answer = answer_pipeline.invoke({"query": qn, "documents": context, "chat_history": summarised_chat_history}) if feedback == "" else answer_pipeline.invoke({"query": qn, "documents": context, "chat_history": summarised_chat_history, "feedback": feedback, "prev_ans": prev_ans})
+        generated_answer = answer_pipeline.invoke({"query": qn, "documents": context, "chat_history": summarised_chat_history}) if feedback == "" else answer_pipeline.invoke({"query": qn, "documents": context, "chat_history": summarised_chat_history, "feedback": feedback})
         print("---" * 5)
         print("Draft answer:")
         print(generated_answer)
@@ -232,6 +247,7 @@ class CustomLLM:
             <|begin_of_text|>
             <|start_header_id|>system<|end_header_id|>
             You are a grader assessing whether the answer has referenced the given factual information.
+            <|eot_id|><|start_header_id|>user<|end_header_id|>
             Give a binary 'yes' or 'no' score to indicate 
             whether a piece of factual information is found in the answer. 
             Provide the binary score as a JSON with a 
@@ -245,7 +261,7 @@ class CustomLLM:
             Give a "yes" if ANY part of the answer references the factual document chunk.
             Give a "no" otherwise, but justify your answer with a VERY BRIEF explanation.
             The "reason" should have DIRECT ACTIONABLE FEEDBACK.
-            <|eot_id|><|start_header_id|>user<|end_header_id|>
+            
             Here is the reference document chunk:
             \n ------- \n
             {document} 
@@ -285,13 +301,15 @@ class CustomLLM:
                     <|begin_of_text|>
                     <|start_header_id|>system<|end_header_id|>
                     You are a grader assessing whether an 
-                    answer is useful to resolve a question. Give a binary score 'yes' or 'no' to indicate whether the answer is 
+                    answer is useful to resolve a question. 
+                    <|start_header_id|>user<|end_header_id|>
+                    Give a binary score 'yes' or 'no' to indicate whether the answer is 
                     useful to resolve a question. Provide the binary score as a JSON with a key 'score' and another key "reason" on how to improve the answer.
                     Format: "score": "yes" or "score": "no", "reason": REPLACE_W_DIRECT_ACTIONABLE_FEEDBACK
                     Do not provide any preamble or explanation, especially for the reason.
                     The reason should have DIRECT ACTIONABLE FEEDBACK. For example, instead of saying "Not useful", say "Add more details on xyz".
                     Keep the reason CONCISE.
-                    <|start_header_id|>user<|end_header_id|>
+                    
                     Chat History:
                     """
                 ),
@@ -333,10 +351,16 @@ class CustomLLM:
                     """
                     <|begin_of_text|>
                     <|start_header_id|>system<|end_header_id|>
-                    You are called a DSTA Chatbot called Jarvis.
-                    Answer the following question in a helpful, friendly, and PROFESSIONAL manner.
-                    Ask follow up questions where you deem relevant.
-                    <|start_header_id|>user<|end_header_id|>
+                    You are the DSTA chatbot named Jarvis. Your primary goal is to assist users effectively.
+
+                    Guidelines:
+
+                    Be helpful, friendly, and professional in your responses.
+                    Thoroughly analyze the user's question and chat history.
+                    If the question is unclear or requires more information, ask clarifying questions.
+                    If you can confidently answer the question, provide a concise, accurate response.
+                    Avoid speculation or assumptions.
+                    Maintain a professional tone throughout the conversation.
                     Chat History:
                     """
                 ),
@@ -344,6 +368,7 @@ class CustomLLM:
                 (
                     "human",
                     """
+                    <|start_header_id|>user<|end_header_id|>
                     Question: {question}
                     <|eot_id|><|start_header_id|>assistant<|end_header_id|>
                     """
@@ -373,13 +398,12 @@ class CustomLLM:
                     """
                     <|begin_of_text|>
                     <|start_header_id|>system<|end_header_id|>
-                    You are a rephraser. 
-                    Your task is to read through the following messages and rephrase the user's question to add more context, making it more specific and meaningful for document retrieval. 
-                    The message immediately preceding the question is likely to be the most relevant for rephrasing.
-                    It's optional to use the chat history to identify key context and keywords that can make the rephrased question more specific.
-                    Do not respond to the user; only rephrase the question.
-                    Do not rephrase text within double quotes.
+                    You are an expert at rephrasing questions for document retrieval.
                     <|start_header_id|>user<|end_header_id|>
+                    You are to make VERY SLIGHT edits to the question to be rephrased below to make it more suitable for retrieval.
+                    DO NOT change any nouns, entities, organisations, persons, topics or the core meaning of the question.
+                    Only ADD words from the chat history to provide additional context, BUT ONLY IF CONTEXT IS NEEDED.
+                    Leave out any preamble or explanation.
                     Chat History:
                     """
                 ),
@@ -388,9 +412,7 @@ class CustomLLM:
                     "human",
                     """
                     Question to rephrase: {question}
-                    Provide your rephrased question directly without any preamble or additional response. 
-                    If you do not think the question needs rephrasing, respond with the original question.
-                    DO NOT include any additional information or context in your response.
+                    IMPORTANT NOTE: YOUR TASK IS TO REPHRASE AND NOT TO ANSWER THE QUESTION.
                     <|eot_id|><|start_header_id|>assistant<|end_header_id|>
                     """
                 )
@@ -414,12 +436,12 @@ class CustomLLM:
             template="""
                 <begin_of_text>
                 <|start_header_id|>system<|end_header_id|>
-                The answer is deemed to be not useful in answering the question.
-                Review the answer in light of the question and the chat history given below.
-                Provide feedback on how to improve the answer and suggest improvements in a CLEAR and CONCISE manner.
-                Limit your response to at most 2 sentences.
-                Exclude any preamble or explanation.
+                You are a grader assessing the relevance of an answer to a user question and chat history.
                 <|start_header_id|>user<|end_header_id|>
+                Evaluate the answer's relevance to the question and chat history.
+                Provide clear, concise feedback (max. 2 sentences) on how to improve the answer.
+                Focus on specific changes and avoid general comments.
+                
                 Chat History: {chat_history}
                 Question: {question}
                 Answer: {generation}

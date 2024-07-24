@@ -1,7 +1,7 @@
-funktio-ai-samples
 pdf-parsing/documents
 pdf-parsing/cache
 pdf-parsing/output
+
 streamlit-ui/jarvis-ui/documents
 streamlit-ui/jarvis-ui/output
 streamlit-ui/jarvis-ui/chat_history
@@ -10,3 +10,4 @@ streamlit-ui/orchestrator/__pycache__
 streamlit-ui/orchestrator/cache
 streamlit-ui/neo4j
 
+topic-modelling/documents

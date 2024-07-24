@@ -1,4 +1,4 @@
-from flask import Flask, request, json
+from flask import Flask, request, json, send_file, jsonify
 from pprint import pprint
 from workflow import buildChatApp
 import traceback
@@ -6,6 +6,8 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.llms import Ollama
 from app_config import config
 from termcolor import cprint
+import os
+import pickle
 
 # This is the only file that receives both inputs and outputs.
 # So it's convenient to store the chat history here.
@@ -18,7 +20,7 @@ chat_history = {}
 @app.route('/entry', methods=['POST'])
 def entry_endpoint():
     data = request.get_json()
-    prompt = data.get('prompt')
+    prompt = data.get('prompt') 
     tenant_id = data.get('tenant_id')
     chat_mode = data.get('chat_mode', 'Semantic Search w/o Agents')
     generate_title = data.get('generate_title', False)
@@ -75,8 +77,10 @@ def entry_endpoint():
             llm = Ollama(model=config["llm_name"], temperature=0, base_url=config["ollama_base_url"])
             # generate title prompt
             prompt=f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-            Generate a 4 word title to categorise the following question and answer pair:
+            You are a title generator.
             <|start_header_id|>user<|end_header_id|>
+            Generate a 4 word title to categorise the following question and answer pair:
+            Leave out any preamble or explanation.
             Question: {prompt}
             Answer: {response}
             <|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
@@ -95,6 +99,24 @@ def entry_endpoint():
     
     return f"I'm sorry, I'm unable to generate a response at the moment. Please try again later."
 
+@app.route('/upload_file', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files or 'save_path' not in request.form:
+        return jsonify({"error": "File or save path part missing"}), 400
+
+    file = request.files['file']
+    save_path = request.form['save_path']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    # Create the directories if they do not exist
+    full_save_path = save_path
+    os.makedirs(os.path.dirname(full_save_path), exist_ok=True)
+
+    print(f"Save path is {save_path}")
+    print(f"Saving file to {full_save_path}")
+    file.save(full_save_path)
+    return jsonify({"message": f"File saved successfully to {full_save_path}"}), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5010)

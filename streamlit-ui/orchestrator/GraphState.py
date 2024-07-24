@@ -13,6 +13,7 @@ class GraphState(TypedDict):
     """
 
     question: str
+    qn_for_retrieval: str
     generation: str
     give_up: str
     documents: List[str]

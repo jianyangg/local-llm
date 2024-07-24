@@ -2,83 +2,18 @@ import os
 from app_config import config
 from langchain.docstore.document import Document as LangchainDocument
 from langchain_community.embeddings import OllamaEmbeddings
-from langchain_community.embeddings import OllamaEmbeddings
-from langchain_community.vectorstores import Neo4jVector
 from langchain_community.vectorstores import Neo4jVector
 from langchain_experimental.text_splitter import SemanticChunker
 from llmsherpa.readers import LayoutPDFReader
-from utils import draw_bounding_box_on_pdf_image
+from utils import draw_bounding_box_on_pdf_image, save_docs_to_jsonl, upload_file
 
 ## Load embeddings
+# TODO: Try using sentence-transformers instead of Ollama
+# embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 embeddings = OllamaEmbeddings(
     base_url=config["ollama_base_url"],	
     model=config["llm_name"]
 )
-
-# def docParser(file_path, st):
-#     """
-#     Parses a document file and returns a split up version of the document.
-#     Requires file type to be reflected in the file extension.
-
-#     Args:
-#         file_path (str): The path to the document file
-
-#     Returns:
-#         List of LangchainDocument objects
-#     """
-
-#     text_splitter = RecursiveCharacterTextSplitter(chunk_size=750, chunk_overlap=20)
-#     file_name = os.path.basename(file_path)
-
-#     # This assumes that we can tell file type from file extension
-#     # May not work for linux based systems
-#     # TODO: NOT THE BEST CHUNKING STRATEGY
-#     if file_path.endswith('.docx'):
-#         doc_splits = []
-#         doc = docxDocument(file_path)
-
-#         para_num = 0
-#         for para in doc.paragraphs:
-#             if not para.text:
-#                 continue
-
-#             langchain_doc_splits = LangchainDocument(
-#                 page_content=para.text,
-#                 metadata={
-#                     "source": file_path,
-#                     "chunk_number": para_num,
-#                     "chunk_type": "para"
-#                 }
-#             )
-#             doc_splits.append(langchain_doc_splits)
-#             para_num += 1
-
-#         return doc_splits
-
-#     else:
-#         # Use LLMSherpa for all other file types
-#         # If exception occurs, raise it
-
-#         try:
-#             # LLMSherpa loader (requires container nlm-ingest to be running)
-#             # TODO: Include more metadata into each chunk (i.e., which page is the chunk from)
-#             loader = LLMSherpaFileLoader(
-#                 file_path=file_path,
-#                 new_indent_parser=True,
-#                 apply_ocr=True,
-#                 strategy="text", # this can be "chunks" or "html".
-#                 llmsherpa_api_url="http://nlm-ingestor:5001/api/parseDocument?renderFormat=all",
-#             )
-
-#             st.toast(f"Chunking document {file_name}...")
-#             docs = loader.load()
-
-#             doc_splits = text_splitter.split_documents(docs)
-
-#             return doc_splits
-            
-#         except Exception as e:
-#             st.write(f"Error: {e}")
 
 def parent_chain(node):
     """
@@ -144,7 +79,9 @@ def is_use_semantic_chunking(leaf_nodes):
     print("Number of paragraphs:", num_paras)
     return count > num_paras/2
 
-def find_leaf_nodes(node, leaf_nodes=[]):
+def find_leaf_nodes(node, leaf_nodes=None):
+    if leaf_nodes is None:
+        leaf_nodes = []
 
     if len(node.children) == 0:
         leaf_nodes.append(node)
@@ -153,18 +90,25 @@ def find_leaf_nodes(node, leaf_nodes=[]):
 
     return leaf_nodes
 
-def docParser(file_path, st, tenant_id):
+
+def docParser(file_path, st=None, tenant_id=None, visualise_chunking=False):
     layout_root = None
+
     try:
         reader = LayoutPDFReader(config["nlm_url"])
         try:
+            print("Reading file:", file_path)
             parsed_doc = reader.read_pdf(file_path)
         except FileNotFoundError:
-            st.error(f"File {file_path} not found.")
+            if st is not None:
+                st.error(f"File {file_path} not found.")
+            print(f"File {file_path} not found.")
             return []
         layout_root = parsed_doc.root_node
     except Exception as e:
-        st.error("Error:", e)
+        if st is not None:
+            st.error("Error:", e)
+        print("Error:", e)
 
     leaf_nodes = find_leaf_nodes(layout_root)
 
@@ -191,22 +135,33 @@ def docParser(file_path, st, tenant_id):
         # Use chunks from llmsherpa
         # Each chunk is each leaf_node with to_context_text()
         collated_pg_content = [to_context_text(node) for node in leaf_nodes]
-            
+
         # Convert to Langchain documents
         docs = [LangchainDocument(page_content=collated_pg_content[i], metadata={key: leaf_nodes[i].block_json[key] for key in ('bbox', 'page_idx', 'level')} | {"file_path": file_path}) for i in range(len(collated_pg_content))]
         
-        # Visualise chunking
-        for doc in docs:
-            draw_bounding_box_on_pdf_image(doc.metadata, colour="green", location=f"chunks/{tenant_id}")
-
+        if visualise_chunking:
+            # Visualise chunking
+            for doc in docs:
+                draw_bounding_box_on_pdf_image(doc.metadata, colour="green", location=f"chunks/{tenant_id}")
 
     return docs
 
 # Upload files
-def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"], password=config["neo4j_password"]):
+def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"], password=config["neo4j_password"], get_topics=False):
     
     combined_doc_splits = []
+    existing_files = os.listdir(f"documents/{tenant_id}")
+    # doc_count works as the document id
+    curr_doc_count = max([int(file.split("_")[0]) for file in existing_files if file.endswith(".jsonl")], default=0)
+    print("Current document count:", curr_doc_count)
     for uploaded_file in uploaded_files:
+        # Remove all json files that are in the uploaded_files
+        # The jsonl file has a <number>_<filename>.jsonl format
+        for file in existing_files:
+            if file.endswith(f"{uploaded_file.name}.jsonl") and len(file.split("_")) == len(uploaded_file.name.split("_")) + 1:
+                os.remove(f"documents/{tenant_id}/{file}")
+                print(f"Removed {file}")
+
         doc_path = f"documents/{tenant_id}/{uploaded_file.name}"
         st.toast(f"Processing {uploaded_file.name}")
         # check if file exists
@@ -214,9 +169,25 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
             st.error(f"File {uploaded_file.name} does not exist in {doc_path}.")
             continue
         doc_splits = docParser(doc_path, st, tenant_id)
+
+        # Save as jsonl
+        jsonl_path = f"documents/{tenant_id}/{curr_doc_count}_{uploaded_file.name}.jsonl"
+        curr_doc_count += 1
+
+        # Store doc_splits
+        save_docs_to_jsonl(doc_splits, jsonl_path)
+
+        # Upload jsonl file to orchestrator
+        response = upload_file(jsonl_path)
+        print(f"File upload for {upload_file} doc splits response: {response.json()}")
+
         print(f"Number of splits: {len(doc_splits)}")
         print("\n")
         combined_doc_splits.extend(doc_splits)
+
+    # Add Source: to each chunk for better context
+    for doc in combined_doc_splits:
+        doc.page_content = f"Source: {doc.metadata['file_path']}\n\n{doc.page_content}"
 
     print("Writing to database in index:", tenant_id)
     try:
@@ -230,8 +201,8 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
             password=password,
             index_name=tenant_id,
             node_label=tenant_id,
-            # keyword_index_name="keyword",
-            # search_type="hybrid"
+            keyword_index_name="keyword",
+            search_type="hybrid"
         )
         print("Documents written to database")
         return True
