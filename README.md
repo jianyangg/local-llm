@@ -35,34 +35,7 @@
   </p>
 </div>
 
-# Content
-<details>
-  <summary><em>Click to expand</em></summary>
-  <ol>
-    <li>
-      <a href="#about">About</a>
-      <ul>
-        <li><a href="#what-makes-this-different-from-other-rag-projects">What makes this different from other RAG?</a></li>
-        <li><a href="#demo">Demo</a></li>
-        <li><a href="#architecture">Architecture</a></li>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
-      </ul>
-    </li>
-    <li><a href="#usage">Usage</a></li>
-    <li><a href="#customisations">Customisations</a></li>
-    <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#contact">Contact</a></li>
-    <li><a href="#acknowledgments">Acknowledgments</a></li>
-  </ol>
-</details>
+# Contents
 
 <details>
   <summary><em>Click to expand</em></summary>
