@@ -65,8 +65,6 @@
   </ol>
 </details>
 
-<br>
-
 # About
 
 Skip to [Getting Started](#getting-started) if you are already familiar with the project.
@@ -192,7 +190,7 @@ _Coming up_
       <p>
       <blockquote>
       <p>&emsp;<em>A Meta Llama3.1 instance.</em></p>
-   </details><br>
+   </details>
 
 1. If you are looking to **continue a past conversation**, select the conversation title of interest from the dropdown menu in the sidebar.
 
@@ -218,7 +216,7 @@ _Coming up_
    <details>
    <summary><strong>Tips</strong></summary>
    This process is computationally and time intensive. Uploading of documents in the **File Uploader Page** will not automatically trigger this process. The advice is to batch process the documents once in a while to generate topics, so as to avoid unnecessary computational load.
-   </details><br>
+   </details>
 
 1. There are two tabs available. One displaying a **table of topic details** and the other displaying a **network graph** for visualisation of the topics.
 
