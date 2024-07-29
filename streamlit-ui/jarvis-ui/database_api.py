@@ -107,7 +107,7 @@ def docParser(file_path, st=None, tenant_id=None, visualise_chunking=False):
         layout_root = parsed_doc.root_node
     except Exception as e:
         if st is not None:
-            st.error("Error:", e)
+            st.error(e)
         print("Error:", e)
 
     leaf_nodes = find_leaf_nodes(layout_root)
@@ -166,7 +166,8 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
         st.toast(f"Processing {uploaded_file.name}")
         # check if file exists
         if not os.path.exists(doc_path):
-            st.error(f"File {uploaded_file.name} does not exist in {doc_path}.")
+            error_str = f"File {uploaded_file.name} does not exist in {doc_path}."
+            st.error(error_str)
             continue
         doc_splits = docParser(doc_path, st, tenant_id)
 
@@ -207,8 +208,7 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
         print("Documents written to database")
         return True
     except Exception as e:
-        st.error(e.message)
-        st.error(e.args)
+        st.error(e)
         return False
 
 

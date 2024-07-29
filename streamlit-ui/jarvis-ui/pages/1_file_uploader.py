@@ -71,7 +71,7 @@ try:
                     else:
                         st.error("File upload issue. Try again later.")
                 except Exception as e:
-                    st.error(f"Upload error!\nError: {e}")
+                    st.error(e)
 
 except Exception as e:
     print("Actual error:", e)

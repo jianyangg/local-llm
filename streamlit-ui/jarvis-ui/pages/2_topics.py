@@ -3,8 +3,6 @@ import streamlit as st
 import yaml
 from utils import generate_tenant_id
 from yaml.loader import SafeLoader
-from sentence_transformers import SentenceTransformer
-from bertopic import BERTopic
 from utils import load_docs_from_jsonl, run_topic_model
 import pandas as pd
 import json
@@ -122,7 +120,7 @@ try:
 
 
 except Exception as e:
-    print("Actual error:", e)
-    st.error(f"Please sign in from the Home page and try again or contact the administrator.")
+    # print("Actual error:", e)
+    st.error(f"An error occured: {e}. Please sign in from the Home page and try again or contact the administrator.")
     st.stop()
 

@@ -23,7 +23,7 @@ import networkx as nx
 import json
 import pandas as pd
 
-llm = Ollama(model="llama3:instruct", temperature=0, base_url=config["ollama_base_url"], verbose=False)
+llm = Ollama(model=config["llm_name"], temperature=0, base_url=config["ollama_base_url"], verbose=False)
 
 def generate_hasher(unique_id):
     # Create a new sha256 hash object
