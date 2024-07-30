@@ -129,9 +129,14 @@ def home(username, name):
 
     # Add chat mode selection to the sidebar
     with st.sidebar:
-        chat_mode = st.selectbox("Select a chat mode", options=("Jarvis", "Semantic Search w Agents", "Semantic Search w/o Agents", "Chatbot"), index=1)
+        chat_mode = st.selectbox("Select a chat mode", options=("Jarvis", "Standard RAG", "Standard Chatbot"), index=0)
+        if chat_mode == "Jarvis":
+            st.write("***Jarvis:** For document queries. High performance, slower speed.*")
+        elif chat_mode == "Standard RAG":
+            st.write("***Standard RAG:** For document queries. Medium performance, fast speed.*")
+        elif chat_mode == "Standard Chatbot":
+            st.write("***Standard Chatbot:** Just a regular chatbot powered by Meta Llama3.1.*")
         convo_title = st.selectbox("Select a conversation", options=past_convos, index=0 if prev_convo_title == "Start" else past_convos.index(prev_convo_title))
-
     # cprint(f"Previous convo title: {prev_convo_title}", "light_cyan")
     # cprint(f"Current convo title: {convo_title}", "light_cyan")
 

@@ -23,8 +23,9 @@ def buildChatApp(tenant_id, chat_mode):
     workflow = StateGraph(GraphState)
 
     # ## TODO: This is a temporary implementation for direct RAG.
-    if chat_mode == "Semantic Search w/o Agents":
-        print("Building Semantic Search w/o Agents")
+    if chat_mode == "Standard RAG":
+        print("Building Standard RAG")
+        # print("Building Semantic Search w/o Agents")
         # Based off chat history, rephrase question to include more context
         workflow.add_node("rephrase_question", decision.rephrase_question)
         workflow.set_entry_point("rephrase_question")
@@ -34,7 +35,7 @@ def buildChatApp(tenant_id, chat_mode):
         workflow.add_edge("retrieve_documents", "generate")
         workflow.add_edge("generate", END)
 
-    elif chat_mode == "Semantic Search w Agents":
+    elif chat_mode == "Jarvis":
         # Define the nodes
         workflow.add_node("retrieve_documents", decision.retrieve_documents)  # retrieve documents
         workflow.add_node("grade_documents", decision.grade_documents)  # grade documents
@@ -131,7 +132,7 @@ def buildChatApp(tenant_id, chat_mode):
         workflow.add_edge("llm", END)
 
 
-    elif chat_mode == "Chatbot":
+    elif chat_mode == "Llama3.1":
         # The workflow just has the generate node.
         workflow.add_node("llm", decision.generate_llm_only)
         workflow.set_entry_point("llm")

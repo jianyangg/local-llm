@@ -78,8 +78,8 @@ Skip to [Getting Started](#getting-started) if you are already familiar with the
 </div>
 
 * A proof of concept for improved RAG performance with
-   * Topic Modelling
-   * Agentic Workflow
+   1. Topic Modelling
+   1. Agentic Workflow
 * Scalable and easily hosted on any sufficiently powerful computer
 * Simple platform to edit and build upon    
 
@@ -101,7 +101,7 @@ _Coming up_
 </div>
 
 * This architecture is designed to achieve multi-tenancy on-premises, using isolated databases in `Neo4j` and concurrent instances of `Ollama` running Meta's `Llama 3.1`.
-* **Note:** The two orchestrators are actually one, but separated for visibility sake.
+* **Note:** The duplicated file database and orchestrators are for demonstration purposes only. In a production environment, the orchestrator and file database would be a single instance each.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -125,7 +125,7 @@ _Coming up_
 
 > **Step 2** - Build the Docker image.
 >```docker
->docker-compose -p whateverStackNameYouWant up --build
+>docker-compose -p jarvis up --build
 >```
 
 > **Step 3** - Open `localhost:8501` on your browser to access the Streamlit page.

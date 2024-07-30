@@ -202,7 +202,7 @@ def upload_files(uploaded_files, st, tenant_id, username=config["neo4j_username"
             password=password,
             index_name=tenant_id,
             node_label=tenant_id,
-            keyword_index_name="keyword",
+            keyword_index_name=f"keyword{tenant_id}",
             search_type="hybrid"
         )
         print("Documents written to database")

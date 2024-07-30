@@ -33,7 +33,7 @@ class Decision:
                 password=config["neo4j_password"],
                 index_name=tenant_id,
                 node_label=tenant_id,
-                keyword_index_name="keyword",
+                keyword_index_name=f"keyword{tenant_id}",
                 search_type="hybrid"
             )
         except Exception as e:
@@ -47,7 +47,7 @@ class Decision:
                 embedding=embeddings,
                 index_name=tenant_id,
                 node_label=tenant_id,
-                keyword_index_name="keyword",
+                keyword_index_name=f"keyword{tenant_id}",
                 search_type="hybrid"
             )
             print(f"Index created for {tenant_id}")
