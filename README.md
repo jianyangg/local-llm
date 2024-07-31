@@ -286,9 +286,8 @@ Don't forget to give the project a star! Thanks again!
 <!-- ACKNOWLEDGMENTS -->
 # Acknowledgments
 
-* [Mentor - Han Ching](https://github.com/hanchingyong)
-* []()
-* []()
+* [Mentor - Yong Han Ching](https://github.com/hanchingyong)
+* [Mentor - Benjamin Lau]()
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

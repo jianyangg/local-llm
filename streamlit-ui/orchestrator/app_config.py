@@ -1,5 +1,5 @@
 # Toggle between docker and non-docker configurations
-USE_DOCKER = True
+USE_DOCKER = False
 
 if USE_DOCKER:
     config = {"ollama_base_url": "http://ollama:11434",

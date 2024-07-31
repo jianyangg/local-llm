@@ -414,7 +414,7 @@ class Decision:
         question = state["question"]
         chat_history = state["chat_history"]
         rephrased_question = self.custom_llm.rephraser(question, chat_history)
-        return {"question": question, "chat_history": chat_history, "qn_for_retrieval": rephrased_question}
+        return {"question": question, "chat_history": chat_history, "qn_for_retrieval": rephrased_question, "attempts": 0}
     
 
     def give_feedback(self, state):

@@ -102,7 +102,7 @@ def run_topic_model(docs, tenant_id):
         filtered_text = " ".join(temp_filtered_text)
         docs_str.append(filtered_text)
 
-    # Save docs_str in a jsonl file
+    # Save docs_str in a pkl file
     print("Saving collated docs_str...")
     docs_str_path = f"documents/{tenant_id}/collated_docs_str_nlp.pkl"
     with open(docs_str_path, 'wb') as file:
@@ -313,7 +313,7 @@ def save_topic_info_table(topic_model, tenant_id, docs, docs_str):
     df_copy["Documents"] = df_copy["Topic"].map(topic_to_docs)
 
     # rename column CustomName to Name
-    df_copy.rename(columns={"Topic": "Topic ID", "CustomName": "Topic", "Representation": "Key Words in Topic", "Count": "No. of Docs", "Representative_Docs": "Key Chunks in Topic"}, inplace=True)
+    df_copy.rename(columns={"Topic": "Topic ID", "CustomName": "Topic", "Representation": "Key Words in Topic", "Count": "No. of Chunks", "Representative_Docs": "Key Chunks in Topic"}, inplace=True)
 
     df_copy.set_index("Topic", inplace=True)
 
