@@ -52,8 +52,8 @@
     <li>
       <a href="#getting-started">Getting Started</a>
       <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
+        <li><a href="#installation-docker-compose--nvidia">Installation (Docker-Compose / NVIDIA)</a></li>
+        <li><a href="#installation-docker--apple-silicon">Installation (Docker / Apple Silicon) </a></li>
       </ul>
     </li>
     <li><a href="#usage">Usage</a></li>
@@ -114,7 +114,9 @@ _Coming up_
 <!-- GETTING STARTED -->
 # Getting Started
 
-## Installation (Docker)
+## Installation (Docker-Compose / NVIDIA)
+> **Note** - This method is not suitable for MacOS users as Ollama on Docker isn't optimised for Apple Silicon (as of 1st August 2024).
+
 > **Step 0** - You need to have Docker Desktop or equivalent [installed](https://docs.docker.com/get-docker/).
 
 > **Step 1** - Clone the repo and navigate to the `streamlit-ui` directory.
@@ -130,7 +132,8 @@ _Coming up_
 
 > **Step 3** - Open `localhost:8501` on your browser to access the Streamlit page.
 
-## Installation (Local)
+## Installation (Docker / Apple Silicon)
+> **Note** - If you are on MacOS, this method of installation is for you. Note that instead of using Ollama on Docker as indicated below, download Ollama [directly](https://ollama.com/download/mac) instead. This is because Ollama on Docker isn't optimised for Apple Silicon (as of 1st August 2024).
 
 > **Step 0** - You need to have Docker Desktop or equivalent [installed](https://docs.docker.com/get-docker/). You also need to install the libraries specified in the `requirements.txt` files. There are two such files, one in the `jarvis-ui` directory and the other in the `orchestrator` directory.
 
@@ -149,7 +152,7 @@ _Coming up_
 >```docker
 >docker run -d --publish=7474:7474 --publish=7687:7687 --volume=$HOME/neo4j/data:/data neo4j
 >```
->### <span style="color: #3498db;">ollama</span>
+>### <span style="color: #3498db;">ollama (skip for MacOS)</span>
 >```docker
 >docker run -d --gpus=all -v ollama:/root/.ollama -p 11434:11434 -e OLLAMA_NUM_PARALLEL=4 --name ollama ollama/ollama
 >```
