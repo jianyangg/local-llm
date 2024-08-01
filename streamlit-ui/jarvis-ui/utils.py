@@ -115,7 +115,8 @@ def run_topic_model(docs, tenant_id):
 
     # Initialise BERTopic
     # Step 1 - Extract embeddings
-    embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+    embedding_model_path = os.path.join(os.path.dirname(__file__), 'embedding_model')
+    embedding_model = SentenceTransformer(embedding_model_path)
 
     # Step 2 - Reduce dimensionality
     umap_model = UMAP(n_neighbors=10, n_components=5, min_dist=0.0, metric='cosine')

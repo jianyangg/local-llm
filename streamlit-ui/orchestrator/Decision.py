@@ -82,7 +82,8 @@ class Decision:
         topic_model_path = f"topic_models_cache/{tenant_id}/topic_model.pkl"
         if os.path.exists(topic_model_path):
             print("Loading topic model...")
-            self.topic_model = BERTopic.load(topic_model_path, embedding_model=SentenceTransformer("all-MiniLM-L6-v2"))
+            embedding_model_path = os.path.join(os.path.dirname(__file__), 'embedding_model')
+            self.topic_model = BERTopic.load(topic_model_path, embedding_model=embedding_model_path)
             print("Topic model loaded.")
         else:
             print("No topic model found.")
