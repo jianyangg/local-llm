@@ -130,7 +130,13 @@ _Coming up_
 >docker-compose -p jarvis up --build
 >```
 
-> **Step 3** - Open `localhost:8501` on your browser to access the Streamlit page.
+> **Step 3** - Open the [Neo4j dashboard](localhost:7474) on your browser and use the credentials `neo4j` for both username and password for the initial login. Change the password to `password`.
+>
+> * Tip: The Docker volume is set to be stored in `~/neo4j`. If you have this folder, it suggests that you have launched this application in the past and your password combination should have already been changed to `neo4j` for username and `password` for password.
+
+> **Step 4** - Finally, open the [Streamlit page](localhost:8501) on your browser to access the application.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Installation (Docker / Apple Silicon)
 > **Note** - If you are on MacOS, this method of installation is for you. Note that instead of using Ollama on Docker as indicated below, download Ollama [directly](https://ollama.com/download/mac) instead. This is because Ollama on Docker isn't optimised for Apple Silicon (as of 1st August 2024).
@@ -157,13 +163,17 @@ _Coming up_
 >docker run -d --gpus=all -v ollama:/root/.ollama -p 11434:11434 -e OLLAMA_NUM_PARALLEL=4 --name ollama ollama/ollama
 >```
 
+> **Step 3** - Open the [Neo4j dashboard](localhost:7474) on your browser and use the credentials `neo4j` for both username and password for the initial login. Change the password to `password`.
+>
+> * Tip: The Docker volume is set to be stored in `~/neo4j`. If you have this folder, it suggests that you have launched this application in the past and your password combination should have already been changed to `neo4j` for username and `password` for password.
 
-> **Step 3** - Run the following commands in separate terminals:
+
+> **Step 4** - Run the following commands in separate terminals:
 >   - `streamlit run jarvis-ui/jarvis.py`
 >   - `python orchestrator/api.py`
 >
 
-> **Step 4** - Open `localhost:8501` on your browser to access the Streamlit page.
+> **Step 5** - Finally, open the [Streamlit page](localhost:8501) on your browser to access the application.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
