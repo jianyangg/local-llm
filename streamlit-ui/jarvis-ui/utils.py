@@ -23,7 +23,7 @@ import networkx as nx
 import json
 import pandas as pd
 
-llm = Ollama(model="llama3:instruct", temperature=0, base_url=config["ollama_base_url"], verbose=False)
+llm = Ollama(model=config["llm_name"], temperature=0, base_url=config["ollama_base_url"], verbose=False)
 
 def generate_hasher(unique_id):
     # Create a new sha256 hash object
@@ -102,7 +102,7 @@ def run_topic_model(docs, tenant_id):
         filtered_text = " ".join(temp_filtered_text)
         docs_str.append(filtered_text)
 
-    # Save docs_str in a jsonl file
+    # Save docs_str in a pkl file
     print("Saving collated docs_str...")
     docs_str_path = f"documents/{tenant_id}/collated_docs_str_nlp.pkl"
     with open(docs_str_path, 'wb') as file:
@@ -115,7 +115,8 @@ def run_topic_model(docs, tenant_id):
 
     # Initialise BERTopic
     # Step 1 - Extract embeddings
-    embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+    embedding_model_path = os.path.join(os.path.dirname(__file__), 'embedding_model')
+    embedding_model = SentenceTransformer(embedding_model_path)
 
     # Step 2 - Reduce dimensionality
     umap_model = UMAP(n_neighbors=10, n_components=5, min_dist=0.0, metric='cosine')
@@ -313,7 +314,7 @@ def save_topic_info_table(topic_model, tenant_id, docs, docs_str):
     df_copy["Documents"] = df_copy["Topic"].map(topic_to_docs)
 
     # rename column CustomName to Name
-    df_copy.rename(columns={"Topic": "Topic ID", "CustomName": "Topic", "Representation": "Key Words in Topic", "Count": "No. of Docs", "Representative_Docs": "Key Chunks in Topic"}, inplace=True)
+    df_copy.rename(columns={"Topic": "Topic ID", "CustomName": "Topic", "Representation": "Key Words in Topic", "Count": "No. of Chunks", "Representative_Docs": "Key Chunks in Topic"}, inplace=True)
 
     df_copy.set_index("Topic", inplace=True)
 

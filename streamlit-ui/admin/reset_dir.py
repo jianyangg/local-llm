@@ -5,7 +5,7 @@ from termcolor import cprint
 
 # Directories to clean: Documents, Chat History, Output, Chunks
 def reset_directories():
-    directories = ["documents", "chat_history", "output", "chunks"]
+    directories = ["documents", "chat_history", "output", "chunks", "topic_models_cache"]
     prepend_path_to_dir = "../jarvis-ui/"
 
     for directory in directories:

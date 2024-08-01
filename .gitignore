@@ -2,12 +2,14 @@ pdf-parsing/documents
 pdf-parsing/cache
 pdf-parsing/output
 
+streamlit-ui/jarvis-ui/__pycache__
 streamlit-ui/jarvis-ui/documents
 streamlit-ui/jarvis-ui/output
 streamlit-ui/jarvis-ui/chat_history
 streamlit-ui/jarvis-ui/chunks
+streamlit-ui/jarvis-ui/topic_models_cache
 streamlit-ui/orchestrator/__pycache__
-streamlit-ui/orchestrator/cache
-streamlit-ui/neo4j
+streamlit-ui/orchestrator/documents
+streamlit-ui/orchestrator/topic_models_cache
 
 topic-modelling/documents
