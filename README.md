@@ -89,7 +89,7 @@ Here's a blank template to get started: To avoid retyping too much info. Do a se
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Demo
-_Coming up_
+[Video](https://github.com/user-attachments/assets/efc55008-cd4d-4f7e-8d89-34e39c6ddceb)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
