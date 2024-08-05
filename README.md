@@ -135,6 +135,12 @@ Here's a blank template to get started: To avoid retyping too much info. Do a se
 > * Tip: The Docker volume is set to be stored in `~/neo4j`. If you have this folder, it suggests that you have launched this application in the past and your password combination should have already been changed to `neo4j` for username and `password` for password.
 
 > **Step 4** - Finally, open the [Streamlit page](localhost:8501) at `localhost:8501` on your browser to access the application.
+> 
+> Some default accounts are:
+>   1. Username: `admin`; Password: `password`
+>   2. Username: `user`; Password: `password`
+>   
+>   You can also register new accounts, but these are there just for testing out the application. 
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -174,6 +180,13 @@ Here's a blank template to get started: To avoid retyping too much info. Do a se
 >
 
 > **Step 5** - Finally, open the [Streamlit page](localhost:8501) at `localhost:8501` on your browser to access the application.
+> 
+> Some default accounts are:
+>   1. Username: `admin`; Password: `password`
+>   2. Username: `user`; Password: `password`
+>   
+>   You can also register new accounts, but these are there just for testing out the application. 
+
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
